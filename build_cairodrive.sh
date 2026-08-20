@@ -46,7 +46,7 @@ TMPKS="$WORK/intermediate.keystore"
 
 # Rewrite only manifest package identity; preserve original component class namespace.
 apktool d -f -s -o "$WORK/decoded" "$WORK/patched-oldpkg.apk" >/dev/null
-python3 "$ROOT/tools/rewrite_manifest.py" "$WORK/decoded/AndroidManifest.xml" --old-package com.generalmagic.magicearth --new-package "$TARGET_PACKAGE" --label "$APP_LABEL" --version-name-suffix "${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"
+python3 "$ROOT/tools/rewrite_manifest.py" "$WORK/decoded/AndroidManifest.xml" --old-package com.generalmagic.magicearth --new-package "$TARGET_PACKAGE" --label "$APP_LABEL" --version-name-suffix="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"
 python3 - "$WORK/decoded/apktool.yml" <<'PY'
 import sys,re
 p=sys.argv[1]; s=open(p,encoding='utf-8').read(); s=re.sub(r'(?m)^renameManifestPackage:.*\n','',s); open(p,'w',encoding='utf-8').write(s)
