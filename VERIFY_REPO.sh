@@ -91,3 +91,7 @@ printf '%s\n' \
   'manifest backup/permission hygiene: PASS' \
   'zero-secret GitHub Actions drive-test signing: PASS' \
   'GitHub source parts all <50 MiB: PASS'
+
+! grep -q 'jarsigner -verify -strict' tools/build_aab.sh || fail 'strict jarsigner AAB verification would reject self-signed Android certs'
+! grep -q 'jarsigner -verify -strict' .github/workflows/build.yml || fail 'workflow strict jarsigner AAB verification would reject self-signed Android certs'
+grep -q 'AAB signer certificate does not match selected keystore' tools/build_aab.sh || fail 'AAB signer fingerprint binding missing'

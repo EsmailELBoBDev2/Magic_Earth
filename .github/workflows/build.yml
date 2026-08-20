@@ -76,7 +76,8 @@ jobs:
           aapt2 dump badging "$UAPK" | grep -q "package: name='com.cairodrive.app'"
           apksigner verify --verbose --print-certs "$APK"
           apksigner verify --verbose --print-certs "$UAPK"
-          jarsigner -verify -strict "$AAB"
+          # Android app signing certs are self-signed; -strict returns code 4 for a valid AAB.
+          jarsigner -verify "$AAB"
           zipalign -c -v 4 "$APK" >/dev/null
 
       - name: Package build artifacts
