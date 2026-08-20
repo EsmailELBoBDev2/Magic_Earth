@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "name": "cairodrive-places-traffic-drive-assist-v22.3",
+  "version": "22.0.0",
+  "description": "Google Places search plus Magic Lane traffic/comfort navigation assist for Magic Earth",
+  "dependencies": {
+    "frida-java-bridge": "7.0.13"
+  },
+  "devDependencies": {
+    "frida": "17.17.0",
+    "frida-compile": "19.0.5"
+  }
+}

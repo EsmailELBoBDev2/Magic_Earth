@@ -1,0 +1,248 @@
+<manifest versionCode='2026114516' versionName='7.1.26.26.21DB1F1B.3C81F7001' compileSdkVersion='36' compileSdkVersionCodename='16' package='com.generalmagic.magicearth' platformBuildVersionCode='36' platformBuildVersionName='16'>
+  <uses-sdk minSdkVersion='28' targetSdkVersion='36'>
+  <uses-permission name='android.permission.INTERNET'>
+  <uses-permission name='android.permission.ACCESS_COARSE_LOCATION'>
+  <uses-permission name='android.permission.ACCESS_FINE_LOCATION'>
+  <uses-permission name='android.permission.CAMERA'>
+  <uses-permission name='android.permission.RECORD_AUDIO'>
+  <uses-permission name='android.permission.ACCESS_BACKGROUND_LOCATION'>
+  <uses-permission name='android.permission.FOREGROUND_SERVICE'>
+  <uses-permission name='android.permission.FOREGROUND_SERVICE_LOCATION'>
+  <uses-permission name='android.permission.FOREGROUND_SERVICE_DATA_SYNC'>
+  <uses-permission name='android.permission.POST_NOTIFICATIONS'>
+  <uses-permission name='android.permission.READ_CONTACTS'>
+  <uses-permission name='android.permission.WRITE_CONTACTS'>
+  <uses-permission name='android.permission.USE_BIOMETRIC'>
+  <uses-permission name='android.permission.BLUETOOTH'>
+  <uses-permission name='android.permission.BLUETOOTH_CONNECT'>
+  <uses-permission name='android.permission.READ_PHONE_STATE'>
+  <uses-permission name='android.permission.MODIFY_AUDIO_SETTINGS'>
+  <uses-permission name='android.permission.READ_EXTERNAL_STORAGE'>
+  <uses-permission name='android.permission.WRITE_EXTERNAL_STORAGE' maxSdkVersion='28'>
+  <uses-permission name='android.permission.POST_NOTIFICATIONS'>
+  <uses-permission name='androidx.car.app.NAVIGATION_TEMPLATES'>
+  <uses-permission name='androidx.car.app.ACCESS_SURFACE'>
+  <uses-feature glEsVersion='196609' required='true'>
+  <queries>
+    <intent>
+      <action name='android.intent.action.SENDTO'>
+      <data scheme='mailto'>
+    <intent>
+      <action name='android.intent.action.TTS_SERVICE'>
+    <intent>
+      <action name='android.intent.action.GET_CONTENT'>
+      <data mimeType='*/*'>
+    <provider name='androidx.car.app.connection.provider' authorities='androidx.car.app.connection'>
+    <intent>
+      <action name='com.android.vending.billing.InAppBillingService.BIND'>
+    <intent>
+      <action name='com.google.android.apps.play.billingtestcompanion.BillingOverrideService.BIND'>
+  <uses-permission name='android.permission.ACCESS_NETWORK_STATE'>
+  <uses-permission name='android.permission.VIBRATE'>
+  <uses-permission name='android.permission.WAKE_LOCK'>
+  <uses-permission name='Manifest.permission.CAPTURE_AUDIO_OUTPUT'>
+  <uses-permission name='android.permission.USE_FINGERPRINT'>
+  <uses-permission name='com.android.vending.BILLING'>
+  <permission name='com.generalmagic.magicearth.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION' protectionLevel='2'>
+  <uses-permission name='com.generalmagic.magicearth.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'>
+  <uses-feature name='android.hardware.camera' required='false'>
+  <uses-feature name='android.hardware.camera.front' required='false'>
+  <uses-feature name='android.hardware.camera.autofocus' required='false'>
+  <uses-feature name='android.hardware.camera.flash' required='false'>
+  <uses-feature name='android.hardware.screen.landscape' required='false'>
+  <uses-feature name='android.hardware.wifi' required='false'>
+  <application label='Magic Earth' icon='@0x7f0d0000' name='android.app.Application' extractNativeLibs='false' appComponentFactory='androidx.core.app.CoreComponentFactory'>
+    <meta-data name='io.flutter.embedding.android.EnableImpeller' value='true'>
+    <meta-data name='io.flutter.embedding.android.EnableHcpp' value='false'>
+    <activity theme='@0x7f1000a4' name='com.generalmagic.magicearth.MainActivity' exported='true' launchMode='2' configChanges='1073758132' windowSoftInputMode='16' hardwareAccelerated='true'>
+      <meta-data name='flutter_deeplinking_enabled' value='false'>
+      <meta-data name='io.flutter.embedding.android.NormalTheme' resource='@0x7f1000a5'>
+      <intent-filter>
+        <action name='android.intent.action.MAIN'>
+        <category name='android.intent.category.LAUNCHER'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='magicearth'>
+      <intent-filter autoVerify='true'>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='https' host='magicearth.com'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='geo'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='google.navigation'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='content'>
+        <data scheme='file'>
+        <data host='*'>
+        <data mimeType='application/magicearth'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='content'>
+        <data scheme='file'>
+        <data host='*'>
+        <data mimeType='application/octet-stream'>
+        <data pathPattern='.*\\.xlm'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='file'>
+        <data scheme='content'>
+        <data host='*'>
+        <data mimeType='*/*'>
+        <data pathPattern='.*\\.xlm'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='content'>
+        <data scheme='file'>
+        <data host='*'>
+        <data mimeType='*/*'>
+        <data mimeType='application/gpx+xml'>
+        <data mimeType='application/octet-stream'>
+        <data pathPattern='.*\\.gpx'>
+        <data pathPattern='.*\\.kml'>
+        <data pathPattern='.*\\.kmz'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <data scheme='file'>
+        <data scheme='content'>
+        <data mimeType='application/zip'>
+        <data mimeType='application/x-zip-compressed'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.BROWSABLE'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.CATEGORY_SELECTED_ALTERNATIVE'>
+        <data mimeType='application/vnd.google-earth.kml+xml'>
+        <data mimeType='application/vnd.google-earth.kmz'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='http'>
+        <data host='*'>
+        <data pathPattern='.*\\.kml'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='http'>
+        <data host='*'>
+        <data pathPattern='.*\\.kmz'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='https'>
+        <data host='*'>
+        <data pathPattern='.*\\.kml'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='https'>
+        <data host='*'>
+        <data pathPattern='.*\\.kmz'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='http'>
+        <data host='*'>
+        <data pathPattern='.*\\.zip'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <category name='android.intent.category.BROWSABLE'>
+        <data scheme='https'>
+        <data host='*'>
+        <data pathPattern='.*\\.zip'>
+      <intent-filter>
+        <action name='android.intent.action.VIEW'>
+        <category name='android.intent.category.DEFAULT'>
+        <data scheme='file'>
+        <data scheme='content'>
+        <data mimeType='*/*'>
+    <provider name='androidx.core.content.FileProvider' exported='false' authorities='com.generalmagic.magicearth.fileprovider' grantUriPermissions='true'>
+      <meta-data name='android.support.FILE_PROVIDER_PATHS' resource='@0x7f120002'>
+    <meta-data name='flutterEmbedding' value='2'>
+    <service name='com.generalmagic.magicearth.foreground_service.MagicEarthForegroundService' exported='false' stopWithTask='true' foregroundServiceType='9'>
+    <meta-data name='com.google.android.gms.car.application' resource='@0x7f120000'>
+    <meta-data name='androidx.car.app.minCarApiLevel' value='2'>
+    <service label='@0x7f0f0040' icon='@0x7f0d0000' name='com.generalmagic.magicearth.car_connectivity_plugin.AndroidAutoService' permission='androidx.car.app.ACCESS_SURFACE' exported='true'>
+      <intent-filter>
+        <action name='androidx.car.app.CarAppService'>
+        <category name='androidx.car.app.category.NAVIGATION'>
+      <intent-filter>
+        <action name='androidx.car.app.action.NAVIGATE'>
+        <category name='android.intent.category.DEFAULT'>
+        <data scheme='geo'>
+      <intent-filter>
+        <action name='androidx.car.app.action.NAVIGATE'>
+        <category name='android.intent.category.DEFAULT'>
+        <data scheme='geo.offline'>
+      <intent-filter>
+        <action name='androidx.car.app.action.DIRECTIONS'>
+        <category name='android.intent.category.DEFAULT'>
+        <data scheme='geo'>
+    <provider name='io.flutter.plugins.imagepicker.ImagePickerFileProvider' exported='false' authorities='com.generalmagic.magicearth.flutter.image_provider' grantUriPermissions='true'>
+      <meta-data name='android.support.FILE_PROVIDER_PATHS' resource='@0x7f120003'>
+    <service name='com.google.android.gms.metadata.ModuleDependencies' enabled='false' exported='false'>
+      <intent-filter>
+        <action name='com.google.android.gms.metadata.MODULE_DEPENDENCIES'>
+      <meta-data name='photopicker_activity:0:required' value=''>
+    <service name='com.baseflow.geolocator.GeolocatorLocationService' enabled='true' exported='false' foregroundServiceType='8'>
+    <provider name='dev.fluttercommunity.plus.share.ShareFileProvider' exported='false' authorities='com.generalmagic.magicearth.flutter.share_provider' grantUriPermissions='true'>
+      <meta-data name='android.support.FILE_PROVIDER_PATHS' resource='@0x7f120004'>
+    <receiver name='dev.fluttercommunity.plus.share.SharePlusPendingIntent' exported='false'>
+      <intent-filter>
+        <action name='EXTRA_CHOSEN_COMPONENT'>
+    <activity theme='@0x01030007' name='io.flutter.plugins.urllauncher.WebViewActivity' exported='false'>
+    <provider name='com.sidlatau.flutteremailsender.FlutterEmailSenderFileProvider' exported='false' authorities='com.generalmagic.magicearth.file_provider' grantUriPermissions='true'>
+      <meta-data name='android.support.FILE_PROVIDER_PATHS' resource='@0x7f120006'>
+    <activity theme='@0x01030010' name='androidx.car.app.CarAppPermissionActivity' exported='false'>
+    <receiver name='androidx.car.app.notification.CarAppNotificationBroadcastReceiver' exported='false'>
+    <uses-library name='androidx.window.extensions' required='false'>
+    <uses-library name='androidx.window.sidecar' required='false'>
+    <service name='androidx.health.platform.client.impl.sdkservice.HealthDataSdkService' enabled='true' exported='true'>
+      <intent-filter>
+        <action name='androidx.health.platform.client.ACTION_BIND_SDK_SERVICE'>
+    <meta-data name='com.google.android.play.billingclient.version' value='8.0.0'>
+    <activity theme='@0x01030010' name='com.android.billingclient.api.ProxyBillingActivity' exported='false' configChanges='1456'>
+    <activity theme='@0x01030010' name='com.android.billingclient.api.ProxyBillingActivityV2' exported='false' configChanges='1456'>
+    <activity theme='@0x01030010' name='com.google.android.gms.common.api.GoogleApiActivity' exported='false'>
+    <meta-data name='com.google.android.gms.version' value='@0x7f0a0009'>
+    <provider name='androidx.startup.InitializationProvider' exported='false' authorities='com.generalmagic.magicearth.androidx-startup'>
+      <meta-data name='androidx.emoji2.text.EmojiCompatInitializer' value='androidx.startup'>
+      <meta-data name='androidx.lifecycle.ProcessLifecycleInitializer' value='androidx.startup'>
+      <meta-data name='androidx.profileinstaller.ProfileInstallerInitializer' value='androidx.startup'>
+    <receiver name='androidx.profileinstaller.ProfileInstallReceiver' permission='android.permission.DUMP' enabled='true' exported='true' directBootAware='false'>
+      <intent-filter>
+        <action name='androidx.profileinstaller.action.INSTALL_PROFILE'>
+      <intent-filter>
+        <action name='androidx.profileinstaller.action.SKIP_FILE'>
+      <intent-filter>
+        <action name='androidx.profileinstaller.action.SAVE_PROFILE'>
+      <intent-filter>
+        <action name='androidx.profileinstaller.action.BENCHMARK_OPERATION'>
+    <service name='com.google.android.datatransport.runtime.backends.TransportBackendDiscovery' exported='false'>
+      <meta-data name='backend:com.google.android.datatransport.cct.CctBackendFactory' value='cct'>
+    <activity theme='@0x7f100188' name='com.journeyapps.barcodescanner.CaptureActivity' clearTaskOnLaunch='true' stateNotNeeded='true' screenOrientation='6' windowSoftInputMode='3'>

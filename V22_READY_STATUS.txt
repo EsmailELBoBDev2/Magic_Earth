@@ -1,0 +1,14 @@
+CairoDrive v22.3 DRIVE-TEST READY SOURCE
+=======================================
+Target repo: EsmailELBoBDev2/Magic_Earth
+Target package: com.cairodrive.app
+Expected Actions artifact: CairoDrive-v22.3-DRIVE-TEST-com.cairodrive.app
+Exact base APK chunks: INCLUDED
+Drive-test signing key: INCLUDED
+Google key embedding pipeline: INCLUDED (literal values filled by PUSH_TO_GITHUB.sh if needed)
+Traffic Levels 1/2/3 -> Magic Lane policy: INCLUDED
+Narrow-road native evidence/roadblock policy: INCLUDED
+Sub-1s recompute instrumentation/optimizations: INCLUDED
+MagicEarth/ExternalCh native simulation A/B: INCLUDED
+Deep RE/security/performance/API economy audit: COMPLETE
+Premium/license bypass: NOT INCLUDED

@@ -1,0 +1,91 @@
+name: Build CairoDrive signed APK + AAB
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cairodrive-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TARGET_PACKAGE: com.cairodrive.app
+  APP_LABEL: CairoDrive
+  FRIDA_VERSION: '17.17.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Linux + Android build dependencies
+        run: ./ci/install-deps.sh
+
+      - name: Reassemble and verify exact private base APK
+        run: ./ci/reassemble-base-apk.sh "$GITHUB_WORKSPACE/input/base.apk"
+
+      - name: Verify exact-target routing + simulation surface
+        run: python3 ./ci/verify-target-routing-surface.py "$GITHUB_WORKSPACE/input/base.apk"
+
+      - name: Fetch pinned Frida Gadget
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./ci/fetch-frida-gadget.sh "$GITHUB_WORKSPACE/input/frida-gadget-android-arm64.so"
+
+      - name: Static verification
+        run: |
+          set -euo pipefail
+          ./verify_patcher.sh | tee VERIFY_OUTPUT.txt
+          ./VERIFY_REPO.sh
+
+      - name: Build signed drive-test APK + AAB
+        env:
+          FRIDA_GADGET: ${{ github.workspace }}/input/frida-gadget-android-arm64.so
+          OUTDIR: ${{ github.workspace }}/out
+        run: ./build_cairodrive.sh "$GITHUB_WORKSPACE/input/base.apk"
+
+      - name: Verify package identity and signatures
+        run: |
+          set -euo pipefail
+          APK=out/CairoDrive-v22.3.apk
+          AAB=out/CairoDrive-v22.3.aab
+          UAPK=out/CairoDrive-v22.3-universal.apk
+          aapt2 dump badging "$APK" | grep -q "package: name='com.cairodrive.app'"
+          aapt2 dump badging "$UAPK" | grep -q "package: name='com.cairodrive.app'"
+          apksigner verify --verbose --print-certs "$APK"
+          apksigner verify --verbose --print-certs "$UAPK"
+          jarsigner -verify -strict "$AAB"
+          zipalign -c -v 4 "$APK" >/dev/null
+
+      - name: Package build artifacts
+        run: ./ci/package-artifacts.sh "$GITHUB_WORKSPACE/out" "$GITHUB_WORKSPACE/dist"
+
+      - name: Upload signed drive-test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CairoDrive-v22.3-DRIVE-TEST-com.cairodrive.app
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14

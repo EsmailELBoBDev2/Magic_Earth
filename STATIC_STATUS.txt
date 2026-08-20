@@ -1,0 +1,26 @@
+CairoDrive v22.3 static status
+============================
+PASS: search-core selftest
+PASS: nav-core selftest
+PASS: traffic-core selftest
+PASS: native-filter selftest
+PASS: JS syntax + shell syntax
+PASS: Java helper compilation
+PASS: exact-target libapp/debounce guards
+PASS: Google Nearby category routing + native fallback markers
+PASS: adaptive selected Details masks + 3-codepoint gate
+PASS: casual Nearby economy / active-nav traffic-aware ranking
+PASS: along-route two-leg traffic-aware ranking
+PASS: immediate definite-offline native handoff
+PASS: selected navigation-point/preferred-entrance handling
+PASS: temporary/future business status + bounded moved-place chain following
+PASS: corrected current-position-relative traffic/narrow roadblocks
+PASS: better-route invalidation cancellation + rollback markers
+PASS: KISS route preference negative assertions
+PASS: active-reroute terrain off + alternatives Never markers
+PASS: WaitingRoute/onRouteUpdated + E2E recompute timing markers
+PASS: stale Google traffic cancellation during native recompute
+PASS: compact supplemental overlay + dynamic country report categories
+PASS: recompute percentile summary tool
+
+Runtime ABI/behavior and the <1000 ms performance target are intentionally NOT claimed by static verification.

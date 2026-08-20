@@ -1,0 +1,15 @@
+Exact target static API evidence used by CairoDrive v22.3
+Target libapp SHA-256: 558e04e9a41aca50a3409ee7640785eedfefb23ff1fe787865b7595f029e19a4
+
+Verified in the exact target DEX/native set:
+- RoutePreferences: avoidTraffic, avoidUnpavedRoads, avoidTurnAroundInstruction, routeType, transportMode, truckProfile, buildTerrainProfile.
+- TruckProfile: width/height/length/mass/axle-load/max-speed support; CarProfile has no width member.
+- Traffic/TrafficPreferences online-traffic configuration.
+- Route terrain profile + roadTypeSections; target strings/enums include SingleTrack and Path.
+- NavigationService: active state, current NavigationInstruction, better-route support, setNavigationRoadBlock.
+- NavigationListener callback surface includes onNavigationInstructionUpdated (CairoDrive does not inject a second listener yet).
+- NavigationInstruction: next/next-next turn, street, signpost, lane, distance, turn details.
+- Native images: getRealisticNextTurnImage, getSignpostDetails/image, getAbstractGeometryImage, LaneImage UID/isValid/asBitmap.
+- SocialOverlay prepare/report and Magic Lane sound/TTS classes used by Report/Repeat controls.
+
+This proves static method/class availability only. It does not prove live object shapes, overload selection, UI placement or runtime behavior.

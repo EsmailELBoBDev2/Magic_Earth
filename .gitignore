@@ -1,0 +1,22 @@
+# Generated build/runtime material
+input/
+out/
+dist/
+node_modules/
+payload/node_modules/
+*.apk
+*.aab
+*.apks
+*.idsig
+*.keystore
+*.jks
+*.p12
+keystore.b64
+.env
+.DS_Store
+
+# The one committed JKS is deliberately a PUBLIC TEST-ONLY update key so CI is
+# zero-setup and repeatable. Never replace it with a production/Play key.
+!ci/test-signing/cairodrive-drive-test.jks
+__pycache__/
+*.py[cod]

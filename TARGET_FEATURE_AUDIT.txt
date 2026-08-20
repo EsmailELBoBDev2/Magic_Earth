@@ -1,0 +1,9 @@
+RoutePreferences_avoidTraffic              YES
+getBetterRouteTimeDistanceToFork           YES
+LaneImage                                  YES
+getLaneImage                               YES
+getSignpostInstruction                     YES
+getJunctionImage                           YES
+SocialOverlay_prepareReporting             YES
+SocialOverlay_report                       YES
+SoundPlayingService_playText               YES
