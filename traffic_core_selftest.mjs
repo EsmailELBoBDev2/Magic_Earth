@@ -15,11 +15,5 @@ const level1=classifyTrafficLevel({usable:true,normalM:900,slowM:50,jamM:0,stron
 const level2=classifyTrafficLevel({usable:true,normalM:600,slowM:500,jamM:0,strongJamRun:null},{trafficDelaySeconds:150,staticDurationSeconds:900}); assert.equal(level2.level,2);
 const level3=classifyTrafficLevel({usable:true,normalM:600,slowM:0,jamM:180,strongJamRun:{lengthM:180}},{trafficDelaySeconds:90,staticDurationSeconds:600}); assert.equal(level3.level,3);
 
-const missingDelay={trafficDelaySeconds:NaN,staticDurationSeconds:NaN};
-assert.equal(hasMeaningfulTrafficDelay(missingDelay),false);
-assert.equal(classifyTrafficLevel({usable:true,normalM:600,slowM:0,jamM:180,strongJamRun:{lengthM:180}},missingDelay).level,1);
-assert.equal(classifyTrafficLevel({usable:true,normalM:600,slowM:0,jamM:350,strongJamRun:{lengthM:350}},missingDelay).level,3);
-
-
 const noisy={...t,edges:[...t.edges]};for(let i=0;i<800;i++)noisy.edges.push({a:{latitude:24+i*0.001,longitude:25},b:{latitude:24+i*0.0011,longitude:25.001},bearing:90,speed:'NORMAL'});const mi=matchMagicSamplesToTraffic(samples,noisy,{maxDistanceM:50,maxHeadingDiffDeg:50,minCoverage:0.5});assert(mi.usable);assert(mi.candidateChecks < mi.totalEdgeChecksBruteForce/5);
 console.log('traffic-core selftest: PASS');

@@ -50,7 +50,7 @@ export function parseTrafficRoutesResponse(body){
 }
 export function hasMeaningfulTrafficDelay(traffic,{minSeconds=75,minRatio=0.06}={}){
   const d=Number(traffic&&traffic.trafficDelaySeconds),base=Number(traffic&&traffic.staticDurationSeconds);
-  if(!Number.isFinite(d)||!Number.isFinite(base)||base<=0)return false; // missing duration evidence must never alone authorize a hard reroute
+  if(!Number.isFinite(d)||!Number.isFinite(base)||base<=0)return false; // no duration evidence: caller may require a longer physical jam run
   return d>=Number(minSeconds)||d/base>=Number(minRatio);
 }
 export function classifyTrafficLevel(match,traffic,{level2MinDelaySeconds=120,level2MinDelayRatio=0.08,level2MinAffectedMeters=400,level3MinJamRunMeters=120}={}){
@@ -59,14 +59,11 @@ export function classifyTrafficLevel(match,traffic,{level2MinDelaySeconds=120,le
   const affected=slow+jam;
   const delay=Number(traffic&&traffic.trafficDelaySeconds),base=Number(traffic&&traffic.staticDurationSeconds);
   const ratio=Number.isFinite(delay)&&Number.isFinite(base)&&base>0?delay/base:NaN;
-  const strongJam=!!(match.strongJamRun&&Number(match.strongJamRun.lengthM)>=Number(level3MinJamRunMeters));
-  const meaningful=hasMeaningfulTrafficDelay(traffic,{minSeconds:75,minRatio:0.06});
-  const jamRunM=match.strongJamRun?Number(match.strongJamRun.lengthM||0):0;
-  const durationEvidenceMissing=!Number.isFinite(delay)||!Number.isFinite(base)||base<=0;
-  // Direct Google speed-reading evidence can still justify avoidance if duration is
-  // unexpectedly absent, but require a much longer contiguous jam so an omitted
-  // staticDuration cannot turn a short red segment into a hard roadblock.
-  if(strongJam&&(meaningful||(durationEvidenceMissing&&jamRunM>=300)))return {level:3,reason:meaningful?'strong-contiguous-jam':'strong-long-jam-no-duration',affectedM:affected,delaySeconds:delay,delayRatio:ratio};
+  const durationEvidence=Number.isFinite(delay)&&Number.isFinite(base)&&base>0;
+  const requiredJamM=durationEvidence?Number(level3MinJamRunMeters):Math.max(300,Number(level3MinJamRunMeters));
+  const strongJam=!!(match.strongJamRun&&Number(match.strongJamRun.lengthM)>=requiredJamM);
+  const meaningful=durationEvidence?hasMeaningfulTrafficDelay(traffic,{minSeconds:75,minRatio:0.06}):strongJam;
+  if(strongJam&&meaningful)return {level:3,reason:durationEvidence?'strong-contiguous-jam':'strong-long-jam-no-duration',affectedM:affected,delaySeconds:delay,delayRatio:ratio};
   const moderateDelay=(Number.isFinite(delay)&&delay>=Number(level2MinDelaySeconds))||(Number.isFinite(ratio)&&ratio>=Number(level2MinDelayRatio));
   const moderateExtent=affected>=Number(level2MinAffectedMeters)||(total>0&&affected/total>=0.12);
   if(moderateDelay&&moderateExtent)return {level:2,reason:'meaningful-slow-traffic',affectedM:affected,delaySeconds:delay,delayRatio:ratio};

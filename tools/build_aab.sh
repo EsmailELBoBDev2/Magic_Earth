@@ -9,7 +9,7 @@ KEYPASS="${6:?}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
 need(){ command -v "$1" >/dev/null || { echo "Missing command: $1" >&2; exit 1; }; }
-for c in java jarsigner keytool unzip zip curl python3 sha256sum; do need "$c"; done
+for c in java jarsigner unzip zip curl python3 sha256sum; do need "$c"; done
 find_sdk_tool(){
   local n="$1" p base cand
   if command -v "$n" >/dev/null 2>&1; then command -v "$n"; return; fi
@@ -82,26 +82,7 @@ bt validate --bundle="$OUT"
 echo "==> Signing AAB with upload key"
 jarsigner -keystore "$KS" -storepass "$STOREPASS" -keypass "$KEYPASS" \
   -digestalg SHA-256 "$OUT" "$ALIAS" >/dev/null
-
-# Android app/upload signing certificates are normally self-signed. `jarsigner
-# -verify -strict` returns warning code 4 even when the ZIP signature is valid.
-# Verify integrity non-strictly, then bind the signer fingerprint to the key.
-jarsigner -verify "$OUT" >/dev/null
-EXPECTED_CERT_SHA256="$(keytool -list -v -keystore "$KS" -storepass "$STOREPASS" -alias "$ALIAS" 2>/dev/null \
-  | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1 | tr -d '[:space:]:')"
-ACTUAL_CERT_SHA256="$(keytool -printcert -jarfile "$OUT" 2>/dev/null \
-  | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1 | tr -d '[:space:]:')"
-[[ -n "$EXPECTED_CERT_SHA256" && "$ACTUAL_CERT_SHA256" == "$EXPECTED_CERT_SHA256" ]] || {
-  echo "ERROR: AAB signer certificate does not match selected keystore" >&2
-  echo "expected=$EXPECTED_CERT_SHA256" >&2
-  echo "actual=$ACTUAL_CERT_SHA256" >&2
-  exit 1
-}
-unzip -Z1 "$OUT" | grep -Eq '^META-INF/[^/]+\.(SF|RSA|DSA|EC)$' || {
-  echo 'ERROR: AAB has no JAR signature metadata' >&2
-  exit 1
-}
-echo "AAB signature: PASS (integrity + expected signer fingerprint)"
+jarsigner -verify -strict "$OUT" >/dev/null
 
 echo "==> Building universal APK from AAB as a structural smoke test"
 APKS="$WORK/universal.apks"

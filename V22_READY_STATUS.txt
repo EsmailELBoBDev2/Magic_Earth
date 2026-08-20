@@ -1,14 +1,49 @@
-CairoDrive v22.3 DRIVE-TEST READY SOURCE
-=======================================
-Target repo: EsmailELBoBDev2/Magic_Earth
-Target package: com.cairodrive.app
-Expected Actions artifact: CairoDrive-v22.3-DRIVE-TEST-com.cairodrive.app
-Exact base APK chunks: INCLUDED
-Drive-test signing key: INCLUDED
-Google key embedding pipeline: INCLUDED (literal values filled by PUSH_TO_GITHUB.sh if needed)
-Traffic Levels 1/2/3 -> Magic Lane policy: INCLUDED
-Narrow-road native evidence/roadblock policy: INCLUDED
-Sub-1s recompute instrumentation/optimizations: INCLUDED
-MagicEarth/ExternalCh native simulation A/B: INCLUDED
-Deep RE/security/performance/API economy audit: COMPLETE
-Premium/license bypass: NOT INCLUDED
+CairoDrive v22.3 GitHub CI — READY STATUS
+========================================
+Remote GitHub repository created: NO (connector exposes no create-repository action)
+Remote GitHub Actions run executed: NO (no remote repository available to this session)
+Prepared private repo target: EsmailELBoBDev2/CairoDrive
+Final Android package: com.cairodrive.app
+Workflow: .github/workflows/build.yml (manual workflow_dispatch)
+Expected Actions artifact: CairoDrive-v22.3-signed-com.cairodrive.app
+
+Expected artifact contents after a successful GitHub Actions run:
+- CairoDrive-v22.3.apk (signed)
+- CairoDrive-v22.3.aab (signed)
+- CairoDrive-v22.3-universal.apk (signed, AAB structural smoke test)
+- CairoDrive-v22.3-patcher-source.zip
+- BUILD_REPORT.txt (includes package + signing cert SHA-1/SHA-256)
+- VERIFY_OUTPUT.txt
+- SHA256SUMS.txt
+- run_route_algo_ab_simulation.py / .sh + AUTO_SIM_AB.md
+
+CI source/base policy:
+- Original Magic Earth APK is NOT in Git history.
+- UPLOAD_BASE_APK_PRIVATE_RELEASE.sh uploads the user's local copy as a private Release asset.
+- Full source APK SHA-256 is checked by CI.
+- Exact target libapp.so SHA-256 is checked again before patching.
+
+Routing policy:
+- Magic Earth / Magic Lane is sole route renderer and navigator.
+- Level 1 Google traffic: keep route.
+- Level 2 Google traffic: native better-route decision; suggestion/auto-switch depends on time gain + narrow context.
+- Level 3 Google traffic: only strong contiguous matched jam + meaningful delay -> temporary Magic Lane roadblock -> native reroute.
+- Strong candidate SingleTrack/Path evidence vetoes CairoDrive auto-switch.
+- Candidate narrow quality unknown during a narrow-road escape -> stock suggestion only.
+- Initial allowOnlineCalculation=true only if exact target wrapper exposes it and network is available.
+- Traffic-only reroutes preserve online-calculation state while disabling terrain-profile build and alternative fan-out; narrow-road escape reroutes keep terrain metadata so the replacement can be checked.
+- All exact-target-safe route algorithms are included: MagicEarth + ExternalCh. Newer simplifiedMl/mlch are absent from the exact APK and are not injected.
+- One-command native simulation A/B tests stock, ExternalCh-reroute, and ExternalCh-all, then writes the measured winner to /data/local/tmp/cairodrive_route_algo and disables simulation.
+- Recompute target <1000 ms is instrumented; the A/B harness decides from real phone data rather than a desktop approximation.
+
+Local verification:
+- search-core selftest: PASS
+- nav-core selftest: PASS
+- traffic-core selftest: PASS
+- native-filter selftest: PASS
+- full static verifier: PASS
+- shell syntax: PASS
+- Python syntax: PASS
+- workflow YAML parse: PASS
+- secret scan: PASS
+- no APK/AAB/keystore in source tree: PASS

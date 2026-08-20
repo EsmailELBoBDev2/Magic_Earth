@@ -18,7 +18,7 @@ This audit is intentionally conservative. A string or imported native function i
 - Profile installer receiver is exported but protected by `android.permission.DUMP`.
 - Exact target declares `POST_NOTIFICATIONS` twice. CairoDrive removes only the duplicate.
 - Exact target contains literal `Manifest.permission.CAPTURE_AUDIO_OUTPUT`, not `android.permission.CAPTURE_AUDIO_OUTPUT`; it is a malformed/no-op permission name. CairoDrive removes this dead declaration rather than pretending it grants privileged audio capture.
-- CairoDrive final package sets `android:allowBackup=false` to reduce backup exposure of CairoDrive runtime state. The user's drive-test Google keys are intentionally baked into the APK and are therefore extractable from the APK regardless of backup settings.
+- CairoDrive final package sets `android:allowBackup=false`, primarily so its runtime-provisioned Google key storage is not included in application backup.
 - Broad stock permissions (location/background location, camera, microphone, contacts, Bluetooth, etc.) are not blindly stripped because stock navigation/voice/QR/contact/Android Auto functionality can depend on them.
 
 ## 2. Package rename / side-by-side correctness
@@ -150,18 +150,19 @@ The helper previously accepted any HTTPS URL supplied by the JS layer and read a
 
 This reduces SSRF-like accidental endpoint expansion, unbounded-memory failure modes, and state leaks without changing normal Google requests.
 
-## 10. API-key policy in the final private drive-test build
+## 10. API-key security change in v22.3
 
-At the user's explicit request, v22.3 uses **build-time embedded Google keys** from the tracked private-repository file `config/google_keys.env`. `payload/build_patch.sh` replaces fixed source markers only in a temporary agent source immediately before `frida-compile`. Runtime staging remains available solely as a key-rotation override.
+Build-time Google-key embedding has been **removed entirely**. Neither APK nor AAB is supposed to contain a Google key from GitHub Actions.
 
-This is convenient and makes GitHub Actions zero-secret/zero-setup, but it is **not credential secrecy**: anyone who obtains the APK can reverse engineer and recover an embedded API key. The meaningful controls are Google Cloud API restrictions, quotas, and the Android application restriction for `com.cairodrive.app` plus the committed drive-test certificate SHA-1.
+After install, `provision_google_key.sh` stages the restricted key briefly through `/data/local/tmp`, launches CairoDrive, and the agent synchronously stores it in app-private SharedPreferences before deleting the plaintext staging files. The host script also removes them in a trap. Google requests identify the actual runtime package + signing certificate for Android-restricted key use.
 
-The committed signing key is intentionally **DRIVE-TEST ONLY**. It exists so the private empty repo can build repeatable update-compatible test APK/AAB artifacts without GitHub Secrets. It is not a production/Play signing key.
+The committed signing key in this repository is intentionally **DRIVE-TEST ONLY**. It exists solely so a private empty repo can build repeatable update-compatible test APK/AAB artifacts with zero GitHub Secrets setup. It is not a production/Play signing key and must never be treated as one.
 
 ## 11. Frida/injection security boundary
 
 - Gadget is configured in script mode, not as a listening network server.
-- Exact `libapp.so` SHA and target hook byte guards fail closed before binary mutation.
+- v22.3 no longer requires an exact `libapp.so` hash for correctness: it structurally verifies the required native/search/routing surface, derives `libGEM` globals from `set_dart_port`, and treats the AOT debounce patch as optional signature-scanned optimization.
+- Frida Gadget is loaded by a non-exported bootstrap provider, so `libflutter.so` remains stock instead of receiving an exact-version binary patch.
 - native request filtering is scoped to search plus route-preference calculateRoute calls; everything else goes to stock libGEM.
 - Google route geometry is never rendered or passed to navigation as the active route.
 

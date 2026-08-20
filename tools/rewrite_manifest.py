@@ -78,39 +78,32 @@ def main():
             if v and v.startswith(old) and el.tag.split('}')[-1] not in COMPONENTS:
                 el.set(k,args.new_package+v[len(old):])
 
-    # Generic early Gadget bootstrap. This replaces the old exact-libflutter
-    # binary patch and therefore survives ordinary Flutter engine updates.
-    provider=ET.Element('provider')
-    provider.set(A+'name','com.cairodrive.bootstrap.GadgetBootstrapProvider')
-    provider.set(A+'authorities',args.new_package+'.cairodrive.gadget.bootstrap')
-    provider.set(A+'exported','false')
-    provider.set(A+'initOrder','1000000000')
-    # Avoid duplicating it if a decoded APK is rebuilt twice.
-    exists=any((el.tag.split('}')[-1]=='provider' and el.get(A+'name')=='com.cairodrive.bootstrap.GadgetBootstrapProvider') for el in app)
-    if not exists:
-        app.insert(0,provider)
 
-    # CairoDrive stores its runtime-restricted Google key in private app storage.
-    # Disable Android backup for the side-by-side test package so that private
-    # state is not copied to cloud/device backup. This does not change stock
-    # Magic Earth because the original package is untouched.
+    # CairoDrive-only hardening / bootstrap. Keep stock component class names,
+    # but add our own non-exported provider so Frida Gadget loads without a
+    # version-specific libflutter patch.
     app.set(A+'allowBackup','false')
-    app.set(A+'extractNativeLibs','true')
+    app.set(A+'fullBackupContent','false')
 
-    # Manifest hygiene from the exact 7.1.26.26 target: POST_NOTIFICATIONS is
-    # declared twice and `Manifest.permission.CAPTURE_AUDIO_OUTPUT` is a literal
-    # malformed permission name (not android.permission.CAPTURE_AUDIO_OUTPUT).
-    # Remove only the duplicate/invalid declarations; do not strip legitimate
-    # stock permissions that optional Magic Earth features may still use.
-    seen_permissions=set()
-    for el in list(root):
-        if el.tag.split('}')[-1] != 'uses-permission':
+    # Remove duplicate/dead permission declarations observed in the audited
+    # target. Do not strip legitimate stock permissions.
+    seen_post=False
+    for child in list(root):
+        if child.tag.split('}')[-1] != 'uses-permission':
             continue
-        name=el.get(A+'name') or ''
-        if name == 'Manifest.permission.CAPTURE_AUDIO_OUTPUT' or name in seen_permissions:
-            root.remove(el)
-            continue
-        seen_permissions.add(name)
+        name=child.get(A+'name')
+        if name == 'Manifest.permission.CAPTURE_AUDIO_OUTPUT':
+            root.remove(child); continue
+        if name == 'android.permission.POST_NOTIFICATIONS':
+            if seen_post: root.remove(child)
+            else: seen_post=True
+
+    provider=ET.Element('provider')
+    provider.set(A+'name','com.cairodrive.bootstrap.CairoDriveBootstrapProvider')
+    provider.set(A+'authorities',args.new_package+'.cairodrive.bootstrap')
+    provider.set(A+'exported','false')
+    provider.set(A+'initOrder','1999999999')
+    app.append(provider)
 
     root.set('package',args.new_package)
     app.set(A+'label',args.label)
@@ -124,7 +117,5 @@ def main():
     print(f'manifest package rewritten: {old} -> {args.new_package}')
     print('component class names preserved against original package namespace')
     print(f'application label: {args.label}')
-    print('bootstrap: private GadgetBootstrapProvider added; no libflutter binary patch required')
-    print('security: allowBackup=false; extractNativeLibs=true; duplicate/invalid uses-permission entries removed')
 
 if __name__=='__main__': main()

@@ -8,4 +8,3 @@
 - Fast-reroute: active terrain off, active alternatives `Never`, stale Google traffic cancellation, 40 ms better-route fallback delay, exact-target status/update timing and E2E timing.
 - Performance target: <1000 ms, **runtime-unproven until phone logs**.
 - Static verification must pass before packaging.
-- Google keys: final private drive-test policy is intentional build-time embedding from `config/google_keys.env`; APK possession implies key extractability.

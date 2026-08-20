@@ -15,29 +15,19 @@ for c in python3 unzip zip zipalign apksigner keytool jarsigner java javac jar n
 find_aapt2(){ if command -v aapt2 >/dev/null 2>&1; then command -v aapt2; return; fi; local base cand; for base in "${ANDROID_SDK_ROOT:-}" "${ANDROID_HOME:-}" /opt/android-sdk "$HOME/Android/Sdk"; do [[ -n "$base" && -d "$base/build-tools" ]] || continue; cand="$(find "$base/build-tools" -mindepth 2 -maxdepth 2 -type f -name aapt2 -print 2>/dev/null | sort -V | tail -1)"; [[ -n "$cand" ]] && { echo "$cand"; return; }; done; return 1; }
 AAPT2="$(find_aapt2 || true)"; [[ -x "$AAPT2" ]] || { echo 'ERROR: aapt2 not found' >&2; exit 1; }
 
-# Exact target gate before any mutation.
-python3 "$ROOT/tools/preflight.py" "$APK" --aapt2 "$AAPT2" --report "$WORK/preflight.json" >/dev/null
+# Structural/fail-closed compatibility gate before mutation.
+python3 "$ROOT/tools/preflight.py" "$APK" --aapt2 "$AAPT2" --report "$WORK/preflight.json"
 
-SIGNING_MODE='external'
 prepare_keystore(){
   if [[ -n "${CAIRODRIVE_KEYSTORE:-}" && -f "${CAIRODRIVE_KEYSTORE}" ]]; then KS="$(realpath "$CAIRODRIVE_KEYSTORE")"; return; fi
   if [[ -n "${CAIRODRIVE_KEYSTORE_BASE64:-}" ]]; then printf '%s' "$CAIRODRIVE_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$WORK/upload.keystore"; KS="$WORK/upload.keystore"; return; fi
   local f="${CAIRODRIVE_KEYSTORE_B64_FILE:-}"
-  [[ -n "$f" ]] || { [[ -f "$ROOT/keystore.b64" ]] && f="$ROOT/keystore.b64"; }
-  if [[ -n "$f" && -f "$f" ]]; then tr -d '\r\n ' < "$f" | base64 -d > "$WORK/upload.keystore"; KS="$WORK/upload.keystore"; return; fi
-  # Zero-setup GitHub/drive-test fallback. This key is intentionally committed
-  # and PUBLIC TO REPO READERS; it is never suitable for Play/production signing.
-  local testks="$ROOT/ci/test-signing/cairodrive-drive-test.jks"
-  [[ -f "$testks" ]] || { echo 'ERROR: no external signing key and drive-test key missing' >&2; exit 1; }
-  KS="$(realpath "$testks")"; SIGNING_MODE='committed-drive-test-key'
+  [[ -n "$f" ]] || { [[ -f "$ROOT/ci/signing/drive-test.keystore.b64" ]] && f="$ROOT/ci/signing/drive-test.keystore.b64"; }
+  [[ -n "$f" && -f "$f" ]] || { echo 'ERROR: signing keystore missing' >&2; exit 1; }
+  tr -d '\r\n ' < "$f" | base64 -d > "$WORK/upload.keystore"; KS="$WORK/upload.keystore"
 }
 prepare_keystore
-if [[ "$SIGNING_MODE" == 'committed-drive-test-key' ]]; then
-  STOREPASS='cairodrive-drive-test-2026'; KEYPASS='cairodrive-drive-test-2026'; ALIAS='cairodrive'
-else
-  STOREPASS="${ANDROID_KEYSTORE_PASSWORD:-}"; ALIAS="${ANDROID_KEY_ALIAS:-cairodrive}"; KEYPASS="${ANDROID_KEY_PASSWORD:-}"
-  [[ -n "$STOREPASS" && -n "$KEYPASS" ]] || { echo 'ERROR: external signing key selected; set ANDROID_KEYSTORE_PASSWORD and ANDROID_KEY_PASSWORD' >&2; exit 1; }
-fi
+STOREPASS="${ANDROID_KEYSTORE_PASSWORD:-cairodrive-drive-test-2026}"; ALIAS="${ANDROID_KEY_ALIAS:-cairodrive}"; KEYPASS="${ANDROID_KEY_PASSWORD:-$STOREPASS}"
 keytool -list -keystore "$KS" -storepass "$STOREPASS" -alias "$ALIAS" >/dev/null
 
 # Build v22.3 against original package first; intermediate signer is irrelevant.
@@ -46,7 +36,7 @@ TMPKS="$WORK/intermediate.keystore"
 
 # Rewrite only manifest package identity; preserve original component class namespace.
 apktool d -f -s -o "$WORK/decoded" "$WORK/patched-oldpkg.apk" >/dev/null
-python3 "$ROOT/tools/rewrite_manifest.py" "$WORK/decoded/AndroidManifest.xml" --old-package com.generalmagic.magicearth --new-package "$TARGET_PACKAGE" --label "$APP_LABEL" --version-name-suffix="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"
+python3 "$ROOT/tools/rewrite_manifest.py" "$WORK/decoded/AndroidManifest.xml" --old-package com.generalmagic.magicearth --new-package "$TARGET_PACKAGE" --label "$APP_LABEL" --version-name-suffix "${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"
 python3 - "$WORK/decoded/apktool.yml" <<'PY'
 import sys,re
 p=sys.argv[1]; s=open(p,encoding='utf-8').read(); s=re.sub(r'(?m)^renameManifestPackage:.*\n','',s); open(p,'w',encoding='utf-8').write(s)
@@ -78,9 +68,8 @@ aab_sha256=$(sha256sum "$FINAL_AAB"|awk '{print $1}')
 keystore_file_sha256=$(sha256sum "$KS"|awk '{print $1}')
 signing_cert_sha1=$CERT_SHA1
 signing_cert_sha256=$CERT_SHA256
-signing_mode=$SIGNING_MODE
-signing_warning=$([[ "$SIGNING_MODE" == 'committed-drive-test-key' ]] && echo TEST_ONLY_KEY_NOT_FOR_PRODUCTION || echo external-key)
-google_places_key_embedded=no-runtime-provisioned
-google_routes_key_embedded=no-runtime-provisioned-or-shared
+google_api_keys_embedded=no
+google_api_keys_runtime_provisioned=yes
+compatibility_report=$(tr -d '\n' < "$WORK/preflight.json")
 EOF
 printf '\nBUILD SUCCESS\nAPK: %s\nAAB: %s\nPackage: %s\n' "$FINAL_APK" "$FINAL_AAB" "$TARGET_PACKAGE"

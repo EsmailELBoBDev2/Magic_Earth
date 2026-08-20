@@ -23,8 +23,10 @@ import {ROUTES_URL,ROUTES_FIELD_MASK,buildTrafficRequest,parseTrafficRoutesRespo
 'use strict';
 
 const TAG = 'cairodrive';
-const VERSION = 'v22.3-kiss-fast-reroute-auto-sim-ab';
+const VERSION = 'v22.3-portable-kiss-fast-reroute-auto-sim-ab';
 const ROUTE_RECOMPUTE_TARGET_MS = 1000;
+const GEM_DART_PORT_OFFSET = __CAIRODRIVE_GEM_DART_PORT_OFFSET__;
+const GEM_POST_COBJECT_SLOT_OFFSET = __CAIRODRIVE_GEM_POST_COBJECT_SLOT_OFFSET__;
 const FULL_NAV_OVERLAY = false;
 const CONNECT_TIMEOUT_MS = 3500;
 const READ_TIMEOUT_MS = 4000;
@@ -81,20 +83,11 @@ function readStagedSecret(path) {
   try { return String(File.readAllText(path) || '').trim(); } catch (_) { return ''; }
 }
 
-// Drive-test builds can bake restricted Google keys into the compiled agent.
-// The tracked private-repo config is injected by payload/build_patch.sh before
-// frida-compile. Runtime staging remains available as an emergency key override.
-const EMBEDDED_GOOGLE_PLACES_API_KEY = '__CAIRODRIVE_EMBEDDED_GOOGLE_PLACES_KEY__';
-const EMBEDDED_GOOGLE_ROUTES_API_KEY = '__CAIRODRIVE_EMBEDDED_GOOGLE_ROUTES_KEY__';
-function embeddedKey(v) {
-  const s=String(v||'').trim();
-  return s.startsWith('__CAIRODRIVE_EMBEDDED_') ? '' : s;
-}
-let GOOGLE_PLACES_API_KEY = readStagedSecret('/data/local/tmp/gpk') || embeddedKey(EMBEDDED_GOOGLE_PLACES_API_KEY);
-let GOOGLE_ROUTES_API_KEY = readStagedSecret('/data/local/tmp/grk') || embeddedKey(EMBEDDED_GOOGLE_ROUTES_API_KEY);
+let GOOGLE_PLACES_API_KEY = readStagedSecret('/data/local/tmp/gpk');
+let GOOGLE_ROUTES_API_KEY = readStagedSecret('/data/local/tmp/grk');
 let __privateStateLoaded = false;
 let __privateStateAttemptedAt = 0;
-let ANDROID_PACKAGE = 'com.cairodrive.app';
+let ANDROID_PACKAGE = 'com.generalmagic.magicearth';
 let ANDROID_CERT_SHA1 = '';
 let __identityResolved = false;
 
@@ -117,20 +110,11 @@ function migratePrivateState(force = false) {
       const prefs = app.getSharedPreferences('cairodrive_private', 0);
       const saved = String(prefs.getString('google_places_key', '') || '').trim();
       const savedRoutes = String(prefs.getString('google_routes_key', '') || '').trim();
-      let committed=true;
-      if(staged||stagedRoutes){
-        const edit=prefs.edit();
-        if(staged)edit.putString('google_places_key',staged);
-        if(stagedRoutes)edit.putString('google_routes_key',stagedRoutes);
-        committed=!!edit.commit(); // persist before deleting plaintext staging files
-      }
+      const edit=prefs.edit(); if(staged)edit.putString('google_places_key',staged); if(stagedRoutes)edit.putString('google_routes_key',stagedRoutes); edit.apply();
       GOOGLE_PLACES_API_KEY = staged || saved || GOOGLE_PLACES_API_KEY;
       GOOGLE_ROUTES_API_KEY = stagedRoutes || savedRoutes || GOOGLE_ROUTES_API_KEY || GOOGLE_PLACES_API_KEY;
-      if(committed){
-        try { const JFile=Java.use('java.io.File'); JFile.$new('/data/local/tmp/gpk').delete(); JFile.$new('/data/local/tmp/grk').delete(); } catch (_) {}
-      }
       __privateStateLoaded = true;
-      log(`KEY_STATE places=${GOOGLE_PLACES_API_KEY ? 'yes' : 'no'} routes=${GOOGLE_ROUTES_API_KEY ? 'yes' : 'no'} routesKey=${GOOGLE_ROUTES_API_KEY&&GOOGLE_ROUTES_API_KEY===GOOGLE_PLACES_API_KEY?'shared':'separate'} storage=private-prefs stagingCleared=${committed?'yes':'no'}`);
+      log(`KEY_STATE places=${GOOGLE_PLACES_API_KEY ? 'yes' : 'no'} routes=${GOOGLE_ROUTES_API_KEY ? 'yes' : 'no'} routesKey=${GOOGLE_ROUTES_API_KEY&&GOOGLE_ROUTES_API_KEY===GOOGLE_PLACES_API_KEY?'shared':'separate'} storage=private-prefs`);
     });
   } catch (e) {
     log(`KEY_STATE_ERROR ${String(e)}`);
@@ -716,75 +700,18 @@ function pushLandmark(listId,landmarkId) {
   callGemRaw('{"id":'+listId+',"class":"LandmarkList","method":"push_back","args":'+landmarkId+',"dependencyId":-1}',false);
 }
 
-let __setDartPortAddr=null;
-let __exactGemLayout=false;
-const EXACT_GEM_LAYOUT={
-  size:46431840,
-  setDartPort:0x296b130,
-  nativeCall:0x296c118,
-  nativeCreate:0x296c1e8,
-};
-function isExactGemLayout(m,setPortAddr,nativeCallAddr,nativeCreateAddr){
-  try{
-    return Number(m.size)===EXACT_GEM_LAYOUT.size &&
-      setPortAddr.sub(m.base).toUInt32()===EXACT_GEM_LAYOUT.setDartPort &&
-      nativeCallAddr.sub(m.base).toUInt32()===EXACT_GEM_LAYOUT.nativeCall &&
-      nativeCreateAddr.sub(m.base).toUInt32()===EXACT_GEM_LAYOUT.nativeCreate;
-  }catch(_){return false;}
-}
-function executablePointer(p){
-  try{const r=Process.findRangeByAddress(p);return !!(r&&String(r.protection||'').includes('x'));}catch(_){return false;}
-}
-function discoverPostCObjectFromSetDartPort(addr){
-  // Version-adaptive discovery: set_dart_port loads a pointer-to-pointer from
-  // a module global immediately before BLR. Decode that tiny exported function
-  // instead of hard-coding a libGEM global offset.
-  try{
-    let pc=addr, pages=new Map(), slots=new Map(), deref=new Map();
-    for(let i=0;i<48;i++){
-      const ins=Instruction.parse(pc), op=String(ins.opStr||'').toLowerCase();
-      let m;
-      if(ins.mnemonic==='adrp' && (m=op.match(/^([xw][0-9]+),\s*#?(0x[0-9a-f]+)$/))){
-        pages.set(m[1].replace(/^w/,'x'),ptr(m[2]));
-      } else if(ins.mnemonic==='ldr' && (m=op.match(/^([xw][0-9]+),\s*\[([xw][0-9]+),\s*#?(0x[0-9a-f]+)\]$/))){
-        const dst=m[1].replace(/^w/,'x'), base=m[2].replace(/^w/,'x');
-        if(dst===base && pages.has(base)) slots.set(dst,pages.get(base).add(parseInt(m[3],16)));
-      } else if(ins.mnemonic==='ldr' && (m=op.match(/^([xw][0-9]+),\s*\[([xw][0-9]+)\]$/))){
-        const dst=m[1].replace(/^w/,'x'), base=m[2].replace(/^w/,'x');
-        if(dst===base && slots.has(base)) deref.set(dst,slots.get(base));
-      } else if(ins.mnemonic==='blr' && (m=op.match(/^([xw][0-9]+)$/))){
-        const reg=m[1].replace(/^w/,'x'), slotAddr=deref.get(reg);
-        if(slotAddr){
-          const holder=slotAddr.readPointer();
-          if(!holder.isNull()){
-            const fp=holder.readPointer();
-            if(!fp.isNull() && executablePointer(fp)){
-              log(`DART_POST_DISCOVERED setPortOff=${addr.sub(gem.base)} slotOff=${slotAddr.sub(gem.base)}`);
-              return new NativeFunction(fp,'bool',['int64','pointer']);
-            }
-          }
-        }
-      }
-      pc=pc.add(ins.size);
-    }
-  }catch(e){log(`DART_POST_DISCOVERY_ERROR ${String(e)}`);}
-  return null;
-}
 function resolveDartPortAndPoster() {
   if(!gem)return false;
   try {
-    if(!postCObject && __setDartPortAddr) postCObject=discoverPostCObjectFromSetDartPort(__setDartPortAddr);
-    // Exact-target fallback only. A future build must match the full known
-    // libGEM module/export layout before these historical globals are touched.
-    if(!dartPort && __exactGemLayout) {
-      const p=gem.base.add(0x2d1b5f0).readS64();
+    if(!dartPort) {
+      const p=gem.base.add(GEM_DART_PORT_OFFSET).readS64();
       if(p.toString()!=='0')dartPort=p;
     }
-    if(!postCObject && __exactGemLayout) {
-      const holder=gem.base.add(0x2b6d5e8).readPointer();
-      if(!holder.isNull()) {
-        const fp=holder.readPointer();
-        if(!fp.isNull()&&executablePointer(fp))postCObject=new NativeFunction(fp,'bool',['int64','pointer']);
+    if(!postCObject) {
+      const slot=gem.base.add(GEM_POST_COBJECT_SLOT_OFFSET).readPointer();
+      if(!slot.isNull()) {
+        const fp=slot.readPointer();
+        if(!fp.isNull())postCObject=new NativeFunction(fp,'bool',['int64','pointer']);
       }
     }
   } catch(e) { log(`DART_PORT_ERROR ${String(e)}`); }
@@ -1516,9 +1443,10 @@ async function requestGoogleTrafficAdvice(snapshot,seq,initial=false){
       return;
     }
     const run=match.strongJamRun;if(!run||run.lengthM<120){log('GOOGLE_TRAFFIC_KEEP reason=level3-without-actionable-run');return;}
-    const durationEvidence=hasMeaningfulTrafficDelay(traffic,{minSeconds:75,minRatio:0.06});
-    const longJamWithoutDuration=(!Number.isFinite(Number(traffic.trafficDelaySeconds))||!Number.isFinite(Number(traffic.staticDurationSeconds)))&&run.lengthM>=300;
-    if(!durationEvidence&&!longJamWithoutDuration){log(`GOOGLE_TRAFFIC_KEEP reason=jam-low-or-missing-delay delayS=${Number.isFinite(Number(traffic.trafficDelaySeconds))?Math.round(Number(traffic.trafficDelaySeconds)):'na'} runM=${Math.round(run.lengthM)}`);return;}
+    const trafficDelay=Number(traffic.trafficDelaySeconds),trafficBase=Number(traffic.staticDurationSeconds);
+    const hasDurationEvidence=Number.isFinite(trafficDelay)&&Number.isFinite(trafficBase)&&trafficBase>0;
+    const jamEvidenceEnough=hasDurationEvidence?hasMeaningfulTrafficDelay(traffic,{minSeconds:75,minRatio:0.06}):run.lengthM>=300;
+    if(!jamEvidenceEnough){log(`GOOGLE_TRAFFIC_KEEP reason=${hasDurationEvidence?'jam-low-delay':'jam-no-duration-short-run'} delayS=${Number.isFinite(trafficDelay)?Math.round(trafficDelay):'na'} runM=${Math.round(run.lengthM)}`);return;}
     const ahead=run.startRouteDistanceM-snapshot.progressed,remainingAfter=snapshot.total-run.endRouteDistanceM;
     if(ahead<80||ahead>3500||remainingAfter<500){log(`GOOGLE_TRAFFIC_KEEP reason=jam-outside-action-window aheadM=${Math.round(ahead)} afterM=${Math.round(remainingAfter)}`);return;}
     const key=`${Math.round(run.startRouteDistanceM/100)}`;const prior=Number(__trafficAvoidedSections.get(key)||0),now=Date.now();if(now-prior<10*60*1000||now-__lastTrafficRoadblockAt<90000){log('GOOGLE_TRAFFIC_KEEP reason=reroute-hysteresis');return;}
@@ -2361,12 +2289,8 @@ function installGem(m) {
   if(gem)return;
   gem=m;
   const nativeCallAddr=m.getExportByName('native_call');
-  const nativeCreateAddr=m.getExportByName('native_call_createObject');
-  nativeCreate=new NativeFunction(nativeCreateAddr,'pointer',['pointer','int64']);
+  nativeCreate=new NativeFunction(m.getExportByName('native_call_createObject'),'pointer',['pointer','int64']);
   const setPortAddr=m.getExportByName('set_dart_port');
-  __setDartPortAddr=setPortAddr;
-  __exactGemLayout=isExactGemLayout(m,setPortAddr,nativeCallAddr,nativeCreateAddr);
-  log(`GEM_LAYOUT exact=${__exactGemLayout?1:0} size=${Number(m.size)} setPortOff=${setPortAddr.sub(m.base)} nativeCallOff=${nativeCallAddr.sub(m.base)} nativeCreateOff=${nativeCreateAddr.sub(m.base)}`);
   const libc=Process.getModuleByName('libc.so');
   libcFree=new NativeFunction(libc.getExportByName('free'),'void',['pointer']);
   libcStrdup=new NativeFunction(libc.getExportByName('strdup'),'pointer',['pointer']);

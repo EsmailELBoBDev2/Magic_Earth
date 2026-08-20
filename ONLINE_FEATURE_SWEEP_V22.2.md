@@ -91,8 +91,3 @@ The original third-party APK is intentionally excluded from Git history. The hel
 - Google narrow-road signals without Egypt coverage.
 - Persistent full Places cache/speculative query prefetch.
 - Premium/license/entitlement bypass.
-
-
-## Final v22.3 decision
-
-The online/API sweep plus exact-binary reverse-engineering found no further target-compatible must-add feature for the defined Cairo passenger-car scope. ExternalCh remains an empirical native A/B decision, not an untested production assumption. Google traffic stays advisory; Magic Lane remains the sole navigation engine.

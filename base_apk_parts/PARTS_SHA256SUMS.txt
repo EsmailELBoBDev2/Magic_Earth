@@ -1,7 +1,0 @@
-87c21f8dbbed09e364346bec45191e64c02b2e6fdcbbc646c18229be8fdc3e63  magic-earth-base.apk.part-00
-e281e44f5dda5fb65f127e50015efd78fd131d3515f61c73f295707ad96be02b  magic-earth-base.apk.part-01
-97018d58d93088432417a427b5f3595b879489ddb23f7eeaeb6839c1340113fe  magic-earth-base.apk.part-02
-bb2b879e5355e9040bcf005ca3835b1fa4363f40aa39bd43188ff1fd503ac4ef  magic-earth-base.apk.part-03
-abbfa5e9ece891e56984dd38bb7b390adf3fdd6b400a146caaab8c2915b566fb  magic-earth-base.apk.part-04
-f8c5cff7c2b5051e5a0d1eef1835372b24d86744bdbeb313c1550367aae9a098  magic-earth-base.apk.part-05
-85aa5deabca11cd18235bb0d14897acff88c84a523f1348b1d0f57bc474aac5e  magic-earth-base.apk.part-06
