@@ -14,7 +14,8 @@ while IFS= read -r -d '' f; do
 done < <(find base_apk_parts -type f -name 'magic-earth-base.apk.part-*' -print0)
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 ./ci/reassemble-base-apk.sh "$TMP/base.apk" >/dev/null
-EXPECTED_BASE="$(tr -d '[:space:]' < base_apk_parts/BASE_APK_SHA256.txt)"
+EXPECTED_BASE="$(awk 'NF {print $1; exit}' base_apk_parts/BASE_APK_SHA256.txt | tr 'A-F' 'a-f')"
+[[ "$EXPECTED_BASE" =~ ^[0-9a-f]{64}$ ]] || fail 'invalid base APK SHA256 metadata' 
 [[ "$(sha256sum "$TMP/base.apk" | awk '{print $1}')" == "$EXPECTED_BASE" ]] || fail 'base APK hash mismatch'
 unzip -t "$TMP/base.apk" >/dev/null || fail 'base APK ZIP integrity'
 python3 ./tools/preflight.py "$TMP/base.apk" --report "$TMP/preflight.json" >/dev/null || fail 'base APK compatibility preflight'
@@ -68,11 +69,20 @@ grep -q 'push:' .github/workflows/build.yml || fail 'push trigger missing'
 grep -q 'reassemble-base-apk.sh' .github/workflows/build.yml || fail 'self-contained base APK CI missing'
 ! grep -q 'secrets\.' .github/workflows/build.yml || fail 'workflow unexpectedly requires GitHub Secrets'
 grep -q 'CairoDrive-v22.3-DRIVE-TEST-com.cairodrive.app' .github/workflows/build.yml || fail 'artifact name mismatch'
+grep -q 'startSimulationWithRoute' tools/preflight.py || fail 'future-target simulation gate missing'
+grep -q 'ExternalCh' tools/preflight.py || fail 'future-target CH gate missing'
+grep -q 'tools/preflight.py' payload/build_patch.sh || fail 'standalone build future preflight missing'
+grep -q 'tools/preflight.py' ci/update-base-apk.sh || fail 'future base-update preflight missing'
+python3 - <<'PYORDER'
+from pathlib import Path
+s=Path('ci/update-base-apk.sh').read_text()
+assert s.index('tools/preflight.py') < s.index('rm -f "$PARTS"/magic-earth-base.apk.part-*')
+PYORDER
 grep -q "APKTOOL_VERSION='3.0.3'" ci/install-deps.sh || fail 'Apktool pin missing'
 grep -q 'dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423' ci/install-deps.sh || fail 'Apktool SHA-256 pin missing'
 
 # 5) Required repository docs/helpers.
-for f in README.md DEEP_REVERSE_ENGINEERING_AUDIT.md INSTALL_DRIVE_TEST.sh provision_google_key.sh PUSH_TO_GITHUB.sh config/google_keys.env experiments/run_route_algo_ab_simulation.sh; do [[ -f "$f" ]] || fail "missing $f"; done
+for f in README.md DEEP_REVERSE_ENGINEERING_AUDIT.md FUTURE_APK_COMPATIBILITY.md INSTALL_DRIVE_TEST.sh provision_google_key.sh PUSH_TO_GITHUB.sh config/google_keys.env experiments/run_route_algo_ab_simulation.sh; do [[ -f "$f" ]] || fail "missing $f"; done
 
 printf '%s\n' \
   'VERIFY_REPO: PASS' \

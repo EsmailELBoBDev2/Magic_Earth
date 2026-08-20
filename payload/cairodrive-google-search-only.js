@@ -717,6 +717,21 @@ function pushLandmark(listId,landmarkId) {
 }
 
 let __setDartPortAddr=null;
+let __exactGemLayout=false;
+const EXACT_GEM_LAYOUT={
+  size:46431840,
+  setDartPort:0x296b130,
+  nativeCall:0x296c118,
+  nativeCreate:0x296c1e8,
+};
+function isExactGemLayout(m,setPortAddr,nativeCallAddr,nativeCreateAddr){
+  try{
+    return Number(m.size)===EXACT_GEM_LAYOUT.size &&
+      setPortAddr.sub(m.base).toUInt32()===EXACT_GEM_LAYOUT.setDartPort &&
+      nativeCallAddr.sub(m.base).toUInt32()===EXACT_GEM_LAYOUT.nativeCall &&
+      nativeCreateAddr.sub(m.base).toUInt32()===EXACT_GEM_LAYOUT.nativeCreate;
+  }catch(_){return false;}
+}
 function executablePointer(p){
   try{const r=Process.findRangeByAddress(p);return !!(r&&String(r.protection||'').includes('x'));}catch(_){return false;}
 }
@@ -759,13 +774,13 @@ function resolveDartPortAndPoster() {
   if(!gem)return false;
   try {
     if(!postCObject && __setDartPortAddr) postCObject=discoverPostCObjectFromSetDartPort(__setDartPortAddr);
-    // Exact-target fallback only. Future builds never consume these offsets.
-    const exactSetPort=__setDartPortAddr && __setDartPortAddr.sub(gem.base).toString()==='0x296b130';
-    if(!dartPort && exactSetPort) {
+    // Exact-target fallback only. A future build must match the full known
+    // libGEM module/export layout before these historical globals are touched.
+    if(!dartPort && __exactGemLayout) {
       const p=gem.base.add(0x2d1b5f0).readS64();
       if(p.toString()!=='0')dartPort=p;
     }
-    if(!postCObject && exactSetPort) {
+    if(!postCObject && __exactGemLayout) {
       const holder=gem.base.add(0x2b6d5e8).readPointer();
       if(!holder.isNull()) {
         const fp=holder.readPointer();
@@ -2346,9 +2361,12 @@ function installGem(m) {
   if(gem)return;
   gem=m;
   const nativeCallAddr=m.getExportByName('native_call');
-  nativeCreate=new NativeFunction(m.getExportByName('native_call_createObject'),'pointer',['pointer','int64']);
+  const nativeCreateAddr=m.getExportByName('native_call_createObject');
+  nativeCreate=new NativeFunction(nativeCreateAddr,'pointer',['pointer','int64']);
   const setPortAddr=m.getExportByName('set_dart_port');
   __setDartPortAddr=setPortAddr;
+  __exactGemLayout=isExactGemLayout(m,setPortAddr,nativeCallAddr,nativeCreateAddr);
+  log(`GEM_LAYOUT exact=${__exactGemLayout?1:0} size=${Number(m.size)} setPortOff=${setPortAddr.sub(m.base)} nativeCallOff=${nativeCallAddr.sub(m.base)} nativeCreateOff=${nativeCreateAddr.sub(m.base)}`);
   const libc=Process.getModuleByName('libc.so');
   libcFree=new NativeFunction(libc.getExportByName('free'),'void',['pointer']);
   libcStrdup=new NativeFunction(libc.getExportByName('strdup'),'pointer',['pointer']);

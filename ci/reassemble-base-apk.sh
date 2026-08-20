@@ -5,8 +5,12 @@ OUT="${1:-$ROOT/input/base.apk}"
 PARTS="$ROOT/base_apk_parts"
 EXPECTED_FILE="$PARTS/BASE_APK_SHA256.txt"
 [[ -s "$EXPECTED_FILE" ]] || { echo "ERROR: missing $EXPECTED_FILE" >&2; exit 2; }
-EXPECTED="$(tr -d '[:space:]' < "$EXPECTED_FILE")"
-[[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "ERROR: invalid base APK SHA256 file" >&2; exit 2; }
+EXPECTED="$(awk 'NF {print $1; exit}' "$EXPECTED_FILE" | tr 'A-F' 'a-f')"
+[[ "$EXPECTED" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "ERROR: invalid base APK SHA256 file: $EXPECTED_FILE" >&2
+  echo "Expected either: <64-hex> OR standard 'sha256sum' format '<64-hex>  filename'." >&2
+  exit 2
+}
 mkdir -p "$(dirname "$OUT")"
 (cd "$PARTS" && sha256sum -c PARTS_SHA256SUMS.txt)
 cat "$PARTS"/magic-earth-base.apk.part-* > "$OUT.tmp"

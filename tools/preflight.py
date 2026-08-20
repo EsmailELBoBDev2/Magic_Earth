@@ -12,11 +12,13 @@ SUPPORTED = {
 }
 EXPECTED_PACKAGE = "com.generalmagic.magicearth"
 SEMANTIC_MARKERS = [
-    b"SearchService", b"SearchRepositoryImpl", b"NavigationService",
-    b"RoutingService", b"NavigationInstruction",
+    b"SearchService", b"SearchRepositoryImpl", b"Landmark", b"LandmarkList",
+    b"NavigationService", b"RoutingService", b"NavigationInstruction",
 ]
 DEX_REQUIRED = [
-    b"ERoutePathAlgorithm", b"MagicEarth", b"startNavigation",
+    b"ERoutePathAlgorithm", b"MagicEarth", b"ExternalCh",
+    b"startNavigation", b"startNavigationWithRoute",
+    b"startSimulation", b"startSimulationWithRoute", b"isSimulationActive",
 ]
 GEM_REQUIRED_EXPORTS = ["native_call", "native_call_createObject", "set_dart_port"]
 
@@ -116,6 +118,7 @@ def main():
             missing=[x for x in required if x not in names]
             report["missing_required"]=missing
             if missing: raise RuntimeError("missing required entries: "+", ".join(missing))
+            manifest_raw=z.read("AndroidManifest.xml")
             libapp=z.read("lib/arm64-v8a/libapp.so")
             libgem=z.read("lib/arm64-v8a/libGEM.so")
             dex_names=sorted(n for n in names if re.fullmatch(r"classes\d*\.dex",Path(n).name))
@@ -130,6 +133,9 @@ def main():
             exports=elf_exports(libgem)
             report["gem_exports"]={name:(name in exports) for name in GEM_REQUIRED_EXPORTS}
             report["gem_ch_marker"]=(b"CMapContractionHierarchy" in libgem)
+            pkg_ascii=EXPECTED_PACKAGE.encode("utf-8")
+            pkg_utf16=EXPECTED_PACKAGE.encode("utf-16le")
+            report["manifest_package_hint"]=(pkg_ascii in manifest_raw or pkg_utf16 in manifest_raw)
     except Exception as e:
         report["error"]=str(e)
         if args.report:
@@ -142,7 +148,9 @@ def main():
     fp=report["libapp_sha256"]
     target=SUPPORTED.get(fp)
     package_value=report.get("package")
-    package_ok=(package_value==EXPECTED_PACKAGE) or (package_value is None and aapt2 is None and target is not None)
+    package_ok=(package_value==EXPECTED_PACKAGE) or (
+        package_value is None and aapt2 is None and bool(report.get("manifest_package_hint"))
+    )
     semantic_ok=all(report["semantic_markers"].values())
     dex_ok=all(report["dex_markers"].values())
     gem_ok=all(report["gem_exports"].values())

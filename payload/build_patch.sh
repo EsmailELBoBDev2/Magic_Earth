@@ -14,6 +14,11 @@ for c in node npm python3 unzip zip zipalign apksigner keytool javac jar sha256s
 [[ -f "$APK" ]] || { echo "APK not found: $APK" >&2; exit 1; }
 [[ -f "$GADGET" ]] || { echo "Frida Gadget not found: $GADGET" >&2; exit 1; }
 
+# Future-safe gate: direct users of payload/build_patch.sh must receive the same
+# structural compatibility check as build_cairodrive.sh. Unknown future builds
+# are accepted only when the required Magic Lane/Flutter surface is still present.
+python3 "$ROOT/../tools/preflight.py" "$APK" --report "$WORK/preflight.json"
+
 find_d8(){
   if command -v d8 >/dev/null 2>&1; then command -v d8; return 0; fi
   local base cand

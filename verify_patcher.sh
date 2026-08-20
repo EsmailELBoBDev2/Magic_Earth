@@ -34,6 +34,8 @@ grep -q "SOCIAL_REPORT_SENT" "$AG"
 grep -q "VOICE_REPEAT_PLAY" "$AG"
 grep -q "DRIVE_TRACE" "$AG"
 grep -q "function driveTraceEnabled(){ return true; }" "$AG"
+grep -q '__exactGemLayout' "$AG"
+grep -q 'EXACT_GEM_LAYOUT' "$AG"
 grep -q "CairoLog" "$AG"
 grep -q "BUCKET_MS = 3L" "$CLOG"
 grep -q "RETAIN_MS = 30L" "$CLOG"
@@ -41,6 +43,8 @@ grep -q "RETAIN_MS = 30L" "$CLOG"
 grep -q "System.loadLibrary(\"gadget\")" "$BOOTSTRAP"
 grep -q "GadgetBootstrapProvider" "$ROOT/tools/rewrite_manifest.py"
 ! grep -q "patch_libflutter.py" "$ROOT/payload/build_patch.sh"
+[[ ! -e "$ROOT/tools/patch_libflutter.py" ]]
+[[ ! -e "$ROOT/payload/patch_manifest_extract.py" ]]
 grep -q "OSM_TRAFFIC_CALMING_QUEUED" "$AG"
 grep -q "traffic_calming=" "$AG"
 grep -q "LANDMARK_BASIC_POPULATED" "$AG"
@@ -265,6 +269,7 @@ TMP="$(mktemp -d)"; trap 'rm -rf "$TMP" /tmp/cairodrive-v22.3-agent-check.mjs' E
 cc -O2 -I"$ROOT" "$ROOT/filter_selftest.c" -o "$TMP/filter-selftest"
 "$TMP/filter-selftest"
 
+if command -v javac >/dev/null 2>&1; then
 # Minimal compile-time Android/org.json stubs so both helper sources receive a
 # real javac syntax/type pass even when this verifier runs without an Android SDK.
 mkdir -p "$TMP/src/org/json" "$TMP/src/android/app" "$TMP/src/android/content" "$TMP/src/android/content/res" "$TMP/src/android/util" "$TMP/src/android/graphics" "$TMP/src/android/graphics/drawable" "$TMP/src/android/media" "$TMP/src/android/os" "$TMP/src/android/view" "$TMP/src/android/widget" "$TMP/out"
@@ -335,5 +340,10 @@ cat > "$TMP/src/android/widget/Button.java" <<'J'
 package android.widget; public class Button extends TextView { public Button(android.app.Activity a){super(a);} public void setAllCaps(boolean b){} public void setBackground(Object o){} public void setMinHeight(int h){} public void setPadding(int a,int b,int c,int d){} public void setOnClickListener(android.view.View.OnClickListener l){} }
 J
 javac --release 8 -d "$TMP/out" $(find "$TMP/src" -name '*.java' -print) "$HTTP" "$BANNER" "$AUTOCOMPLETE_PANEL" "$CLOG" >/dev/null
+
+else
+  echo "verify_patcher: NOTE — javac not installed; helper Java compile check skipped locally."
+  echo "verify_patcher: NOTE — GitHub Actions installs Java 17 and performs this compile check in CI."
+fi
 
 echo "v22.3 KISS + fast-reroute + auto-sim-AB static verification: PASS"
