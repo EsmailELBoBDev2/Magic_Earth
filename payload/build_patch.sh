@@ -68,14 +68,13 @@ jar cf "$WORK/cairodrive-helper.jar" -C "$WORK/helper-classes" .
 node "$ROOT/../search_core_selftest.mjs"
 node "$ROOT/../nav_core_selftest.mjs"
 node "$ROOT/../traffic_core_selftest.mjs"
-echo "==> Bundling v22.3 Places + traffic-advisory + drive-assist agent"
-cp "$ROOT/cairodrive-google-search-only.js" "$WORK/cairodrive-agent.js"
-# Private-repo drive-test policy: inject the tracked restricted Google key(s) into
-# the temporary agent source before frida-compile. The source markers never reach
-# the final APK. GOOGLE_* environment variables can override the tracked file.
-KEY_FILE="${CAIRODRIVE_GOOGLE_KEYS_FILE:-$ROOT/../config/google_keys.env}"
-python3 "$ROOT/../tools/embed_google_keys.py" "$WORK/cairodrive-agent.js" "$KEY_FILE"
-./node_modules/.bin/frida-compile "$WORK/cairodrive-agent.js" -o "$WORK/libgadget.script.so" -S -c
+echo "==> Bundling v22.3.3 Places + traffic-advisory + drive-assist agent"
+# Compile the entry file in-place so frida-compile resolves search-core.mjs,
+# nav-core.mjs and traffic-core.mjs from their real source directory. v22.3.2
+# copied only the entry file to a temp directory, which broke these imports in CI.
+# Google keys are intentionally NOT embedded in the APK/AAB; runtime provisioning
+# migrates them into CairoDrive-private SharedPreferences after installation.
+./node_modules/.bin/frida-compile "$ROOT/cairodrive-google-search-only.js" -o "$WORK/libgadget.script.so" -S -c
 [[ -s "$WORK/libgadget.script.so" ]] || { echo "Agent bundle missing" >&2; exit 1; }
 
 mkdir -p "$WORK/root"

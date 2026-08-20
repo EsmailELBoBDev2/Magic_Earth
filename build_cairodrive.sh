@@ -80,7 +80,7 @@ signing_cert_sha1=$CERT_SHA1
 signing_cert_sha256=$CERT_SHA256
 signing_mode=$SIGNING_MODE
 signing_warning=$([[ "$SIGNING_MODE" == 'committed-drive-test-key' ]] && echo TEST_ONLY_KEY_NOT_FOR_PRODUCTION || echo external-key)
-google_places_key_embedded=yes-private-repo-config
-google_routes_key_embedded=yes-private-repo-config-or-shared
+google_places_key_embedded=no-runtime-provisioned
+google_routes_key_embedded=no-runtime-provisioned-or-shared
 EOF
 printf '\nBUILD SUCCESS\nAPK: %s\nAAB: %s\nPackage: %s\n' "$FINAL_APK" "$FINAL_AAB" "$TARGET_PACKAGE"

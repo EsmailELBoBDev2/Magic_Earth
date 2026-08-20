@@ -1,4 +1,4 @@
-# CairoDrive v22.3 — drive-test-ready GitHub CI build
+# CairoDrive v22.3.1 — drive-test-ready GitHub CI build
 
 Target: exact Magic Earth / Magic Lane 7.1.26.26 generation. Final Android application ID: **`com.cairodrive.app`**.
 
@@ -15,7 +15,7 @@ cd /path/to/Magic_Earth
 ./PUSH_TO_GITHUB.sh
 ```
 
-If `config/google_keys.env` still has placeholders, the script asks once for your Google Places key and optional separate Routes key. Because you explicitly requested baked keys, it writes them into the **private repository**, then `VERIFY_REPO.sh` runs, the source is committed, and `main` is pushed. No GitHub Actions secrets, private release, local APK build, local Android SDK, or local keystore setup is required.
+If `config/google_keys.env.example` still has placeholders, the script asks once for your Google Places key and optional separate Routes key. Because you explicitly requested baked keys, it writes them into the **private repository**, then `VERIFY_REPO.sh` runs, the source is committed, and `main` is pushed. No GitHub Actions secrets, private release, local APK build, local Android SDK, or local keystore setup is required.
 
 The push automatically starts `.github/workflows/build.yml`.
 
@@ -23,14 +23,14 @@ The push automatically starts `.github/workflows/build.yml`.
 
 Artifact name:
 
-`CairoDrive-v22.3-DRIVE-TEST-com.cairodrive.app`
+`CairoDrive-v22.3.1-DRIVE-TEST-com.cairodrive.app`
 
 Contents:
 
-- `CairoDrive-v22.3.apk` — signed installable APK
-- `CairoDrive-v22.3.aab` — signed Android App Bundle
-- `CairoDrive-v22.3-universal.apk` — universal APK rebuilt from the AAB and verified
-- `CairoDrive-v22.3-patcher-source.zip`
+- `CairoDrive-v22.3.1.apk` — signed installable APK
+- `CairoDrive-v22.3.1.aab` — signed Android App Bundle
+- `CairoDrive-v22.3.1-universal.apk` — universal APK rebuilt from the AAB and verified
+- `CairoDrive-v22.3.1-patcher-source.zip`
 - `BUILD_REPORT.txt`
 - `VERIFY_OUTPUT.txt`
 - `SHA256SUMS.txt`
@@ -65,7 +65,7 @@ This is **not a Play/production signing key**. Anyone who can read the private r
 
 ## Google keys — intentionally embedded
 
-You explicitly chose baked keys for this personal private build. `config/google_keys.env` is therefore intentionally tracked and `payload/build_patch.sh` injects those values into the temporary Frida agent before compilation.
+You explicitly chose baked keys for this personal private build. `config/google_keys.env.example` is therefore intentionally tracked and `payload/build_patch.sh` injects those values into the temporary Frida agent before compilation.
 
 The built APK/AAB consequently contains recoverable API credentials. **Private GitHub does not protect a key after someone obtains the APK.** Protect the key in Google Cloud with API restrictions, quotas, and the Android application restriction:
 

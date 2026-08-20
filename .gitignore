@@ -23,3 +23,6 @@ __pycache__/
 
 # Frida compiler temporary project-local build dirs
 payload/.cairodrive-build.*
+
+# Runtime API credentials are never committed or embedded.
+config/google_keys.env

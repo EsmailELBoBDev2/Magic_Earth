@@ -28,28 +28,24 @@ node traffic_core_selftest.mjs >/dev/null
 cc -std=c11 -O2 filter_selftest.c -o "$TMP/filter_selftest"
 "$TMP/filter_selftest" >/dev/null
 python3 -m py_compile tools/*.py ci/*.py experiments/*.py
+python3 ./ci/verify-agent-module-graph.py >/dev/null || fail 'agent module graph'
 find . -type f -name '*.sh' -print0 | while IFS= read -r -d '' f; do bash -n "$f" || exit 1; done
 
-# 3) Security/economy invariants introduced by v22.3.
-# User explicitly chose key embedding. Literal Google-looking keys may exist only
-# in the designated tracked private config; never in ordinary source/docs.
-key_hits="$(grep -RIlE 'AIza[0-9A-Za-z_-]{20,}' --exclude='*.part-*' --exclude='*.jks' . 2>/dev/null || true)"
-if [[ -n "$key_hits" ]]; then
-  while IFS= read -r f; do [[ "$f" == './config/google_keys.env' ]] || fail "Google API key found outside config/google_keys.env: $f"; done <<<"$key_hits"
-fi
-grep -q '__CAIRODRIVE_EMBEDDED_GOOGLE_PLACES_KEY__' payload/cairodrive-google-search-only.js || fail 'embedded Places marker missing'
-grep -q '__CAIRODRIVE_EMBEDDED_GOOGLE_ROUTES_KEY__' payload/cairodrive-google-search-only.js || fail 'embedded Routes marker missing'
-grep -q 'config/google_keys.env' payload/build_patch.sh || fail 'tracked Google key injection path missing'
-cp payload/cairodrive-google-search-only.js "$TMP/key-agent.js"
-cat > "$TMP/google_keys.env" <<'EOFKEY'
-GOOGLE_PLACES_API_KEY=TEST_PLACES_KEY_DO_NOT_USE
-GOOGLE_ROUTES_API_KEY=TEST_ROUTES_KEY_DO_NOT_USE
-EOFKEY
-python3 tools/embed_google_keys.py "$TMP/key-agent.js" "$TMP/google_keys.env" >/dev/null || fail 'Google key injector execution failed'
-! grep -q '__CAIRODRIVE_EMBEDDED_GOOGLE_' "$TMP/key-agent.js" || fail 'Google key marker survived injector selftest'
-grep -q 'TEST_PLACES_KEY_DO_NOT_USE' "$TMP/key-agent.js" || fail 'Places key injector selftest failed'
-grep -q 'TEST_ROUTES_KEY_DO_NOT_USE' "$TMP/key-agent.js" || fail 'Routes key injector selftest failed'
-grep -q 'stagingCleared=' payload/cairodrive-google-search-only.js || fail 'runtime key override cleanup marker missing'
+# 3) Security/economy invariants introduced by v22.3.3.
+# API keys must never be committed or embedded. The built agent keeps inert
+# placeholders and loads runtime-provisioned values from private app storage.
+key_hits="$(grep -RIlE 'AIza[0-9A-Za-z_-]{20,}' --exclude='*.part-*' --exclude='*.jks' --exclude='google_keys.env' --exclude-dir='.git' . 2>/dev/null || true)"
+[[ -z "$key_hits" ]] || fail "Google API key material found in tracked/source files: $key_hits"
+grep -qx 'config/google_keys.env' .gitignore || fail 'runtime key config is not ignored'
+if [[ -d .git ]] && git ls-files --error-unmatch config/google_keys.env >/dev/null 2>&1; then fail 'config/google_keys.env is still tracked; run ./PUSH_TO_GITHUB.sh to untrack it'; fi
+grep -q '__CAIRODRIVE_EMBEDDED_GOOGLE_PLACES_KEY__' payload/cairodrive-google-search-only.js || fail 'inert Places placeholder missing'
+grep -q '__CAIRODRIVE_EMBEDDED_GOOGLE_ROUTES_KEY__' payload/cairodrive-google-search-only.js || fail 'inert Routes placeholder missing'
+! grep -q 'embed_google_keys.py' payload/build_patch.sh || fail 'build still embeds Google keys'
+! grep -q 'config/google_keys.env' payload/build_patch.sh || fail 'build still depends on tracked Google key config'
+grep -q 'frida-compile "$ROOT/cairodrive-google-search-only.js"' payload/build_patch.sh || fail 'Frida in-place module-resolution fix missing'
+grep -q 'stagingCleared=' payload/cairodrive-google-search-only.js || fail 'runtime key migration cleanup marker missing'
+grep -q '/data/local/tmp/gpk' provision_google_key.sh || fail 'runtime Places provisioning path missing'
+grep -q '/data/local/tmp/grk' provision_google_key.sh || fail 'runtime Routes provisioning path missing'
 grep -q 'places.googleapis.com' payload/helper/com/cairodrive/search/AsyncHttp.java || fail 'Places allowlist missing'
 grep -q 'routes.googleapis.com' payload/helper/com/cairodrive/search/AsyncHttp.java || fail 'Routes allowlist missing'
 grep -q 'MAX_RESPONSE_CHARS = 4 \* 1024 \* 1024' payload/helper/com/cairodrive/search/AsyncHttp.java || fail 'HTTP response cap missing'
@@ -82,14 +78,14 @@ grep -q "APKTOOL_VERSION='3.0.3'" ci/install-deps.sh || fail 'Apktool pin missin
 grep -q 'dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423' ci/install-deps.sh || fail 'Apktool SHA-256 pin missing'
 
 # 5) Required repository docs/helpers.
-for f in README.md DEEP_REVERSE_ENGINEERING_AUDIT.md FUTURE_APK_COMPATIBILITY.md INSTALL_DRIVE_TEST.sh provision_google_key.sh PUSH_TO_GITHUB.sh config/google_keys.env experiments/run_route_algo_ab_simulation.sh; do [[ -f "$f" ]] || fail "missing $f"; done
+for f in README.md DEEP_REVERSE_ENGINEERING_AUDIT.md FUTURE_APK_COMPATIBILITY.md INSTALL_DRIVE_TEST.sh provision_google_key.sh PUSH_TO_GITHUB.sh config/google_keys.env.example experiments/run_route_algo_ab_simulation.sh; do [[ -f "$f" ]] || fail "missing $f"; done
 
 printf '%s\n' \
   'VERIFY_REPO: PASS' \
   'configured base APK: PASS' \
   'route/simulation target surface: PASS' \
   'search/nav/traffic/native-filter selftests: PASS' \
-  'embedded-key injection + runtime override cleanup: PASS' \
+  'runtime-only Google key provisioning + no embedded keys: PASS' \
   'Google host/body/state HTTP hardening: PASS' \
   'Level-3 missing-delay guard: PASS' \
   'manifest backup/permission hygiene: PASS' \
