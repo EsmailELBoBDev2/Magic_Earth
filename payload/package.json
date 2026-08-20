@@ -9,5 +9,8 @@
   "devDependencies": {
     "frida": "17.17.0",
     "frida-compile": "19.0.5"
+  },
+  "allowScripts": {
+    "frida@17.17.0": true
   }
 }

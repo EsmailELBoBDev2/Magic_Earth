@@ -23,7 +23,7 @@ This bundle contains the user-supplied base APK as 24 MiB chunks and a reproduci
 
 ## CI output
 
-GitHub Actions uploads `CairoDrive-v22.3-DRIVE-TEST-com.cairodrive.app` containing:
+GitHub Actions uploads a versioned `CairoDrive-v22.3-<upstream>-DRIVE-TEST-<commit>` artifact containing:
 
 - `CairoDrive-v22.3.apk`
 - `CairoDrive-v22.3.aab`
@@ -37,4 +37,17 @@ Google API credentials are **not embedded** in Git or build artifacts. They are 
 
 ## Updating to a future Magic Earth APK
 
-Keep the new APK whole outside Git and run `./UPDATE_APK.sh /path/to/new.apk`. Future APKs are SHA-pinned as private GitHub Release assets, avoiding Git's 100 MiB object limit and binary-history growth. CI tries the portable fail-closed patch automatically; incompatibility or build failure triggers a deep diagnostic artifact. See `FUTURE_APK_AUTOMATION.md`.
+Drop one whole new APK into `DROP_NEW_APK_HERE/` and run `./SMART_UPDATE.sh`. The helper uploads the large APK as a private SHA-pinned GitHub Release asset, commits only its tiny selector, pushes `main`, watches CI, and downloads results. CI compares the new version against `baseline/known-good.json`, attempts the portable patch only when required anchors remain valid, and automatically creates a deep reverse-engineering handoff artifact after any compatibility or build failure. See `FUTURE_APK_AUTOMATION.md`.
+
+
+## CI hardening added after run #10
+
+- Frida 19.x entrypoint is generated inside the `payload/` project root (fixes `Entrypoint must be inside the project root`).
+- compatibility/build setup is one job instead of duplicating the entire toolchain twice;
+- build-stage logs are automatically carried into the forensic handoff;
+- forensic dependency installation is best-effort, so one upstream tool outage does not suppress the basic diagnostic artifact;
+- APK hashing is streaming and DEX marker scanning is per-file to reduce RAM;
+- a known-good compatibility delta separates expected version drift from required-anchor loss;
+- CI refuses to run if the repository is no longer private;
+- npm explicitly records the reviewed Frida install script version, caches only the npm download store, and automatically switches to `npm ci` if a lockfile is later committed;
+- the local log mirror uses a bounded queue so a log storm cannot grow an unbounded in-memory backlog.

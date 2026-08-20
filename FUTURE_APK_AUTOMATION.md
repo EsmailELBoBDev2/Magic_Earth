@@ -1,64 +1,88 @@
-# Future APK update automation
+# Future APK smart-update automation
 
-## Normal workflow (recommended)
+## The only normal update flow
 
-Do **not** copy the new APK into the Git repository and do not split it manually.
-Keep the whole `.apk` anywhere on your machine (for example `~/Downloads`) and run:
+1. Put **one whole Magic Earth `.apk`** in `DROP_NEW_APK_HERE/`.
+2. From the repo root run:
 
 ```bash
-./UPDATE_APK.sh ~/Downloads/new-magic-earth.apk
+./SMART_UPDATE.sh
 ```
 
-The helper:
+That is the recommended path. Do not zip it, do not split it, and do not `git add` the APK itself.
 
-1. validates that the file is an APK/ZIP with `AndroidManifest.xml`;
-2. hashes it with SHA-256;
-3. requires `EsmailELBoBDev2/Magic_Earth` to remain private;
-4. uploads the whole APK to the private `upstream-apks` GitHub Release under a SHA-derived immutable asset name;
-5. writes/commits `base_apk_release.json` containing the exact asset + SHA-256;
-6. pushes `main`, which starts GitHub Actions.
+Why: GitHub regular Git hard-blocks individual files at 100 MiB. `SMART_UPDATE.sh` keeps the large APK out of Git, uploads it as a private GitHub Release asset, commits only a tiny SHA-256-pinned selector, pushes `main`, watches CI, and downloads available artifacts.
 
-Use `--watch` if you want the local command to follow the Actions run to completion:
+You may also pass a file directly:
+
+```bash
+./SMART_UPDATE.sh ~/Downloads/new-magic-earth.apk
+```
+
+The lower-level equivalent is:
 
 ```bash
 ./UPDATE_APK.sh --watch ~/Downloads/new-magic-earth.apk
 ```
 
-The old 24 MiB chunk input remains supported with `--legacy-chunks`.
+The original 24 MiB Git chunk input remains supported as a legacy/offline fallback with `UPDATE_APK.sh --legacy-chunks`.
 
-## What CI does
+## Smart CI state machine
 
-1. Materializes the exact APK selected by `base_apk_release.json` (or legacy chunks) and verifies SHA-256.
-2. Runs fail-closed structural compatibility checks.
-3. If compatible, runs the normal patch/build/sign/package pipeline.
-4. If compatibility fails **or** the build fails, starts the `Automatic future-APK forensics` job.
-5. Forensics runs Apktool, JADX, ELF/binutils analysis, existing CairoDrive preflight/routing checks, and best-effort Blutter AOT analysis.
-6. It uploads `CairoDrive-FUTURE-APK-FORENSICS-<commit>`.
-
-The diagnostic job intentionally does **not** silently invent new binary offsets/patches. If required surfaces changed, it refuses the unsafe patch and produces evidence for review. This prevents a future Magic Earth update from generating an APK that builds but has subtly broken navigation/search behavior.
-
-## What to send back when a future version fails
-
-Download the latest run artifacts:
-
-```bash
-./GET_LATEST_RESULT.sh
+```text
+selected upstream APK
+        |
+        v
+SHA/provenance verification
+        |
+        v
+fast compatibility fingerprint
+        |
+        +---- required anchor moved/missing ----> FAIL CLOSED
+        |                                           |
+        |                                           v
+        |                                  automatic deep forensics
+        |
+        +---- compatible ----> patch/build/sign/package
+                                  |
+                                  +---- success ---> drive-test artifacts
+                                  |
+                                  +---- any failure -> automatic deep forensics
 ```
 
-Send `FUTURE_APK_REPORT.txt` first. If more evidence is needed, the artifact also contains:
+The pipeline never invents binary offsets after an upstream change. It discovers safe `libGEM` globals from code shape, uses structural/semantic anchors, and treats optional search debounce patching as optional. Required search/navigation/native surfaces are fail-closed.
 
-- `preflight.json`
-- `logs/preflight.log`
-- `logs/routing-surface.log`
-- `JADX_SEMANTIC_MATCHES.txt`
-- `JADX_URLS.txt`
-- `BLUTTER_SEMANTIC_MATCHES.txt` when Blutter succeeds
-- decoded manifest
-- per-library ELF headers, symbols, dynamic sections and strings
-- tool logs and exit-status JSON
+## What is checked before patching
 
-Full Apktool/JADX decompile trees are intentionally transient and are summarized rather than uploaded: full trees can be enormous and are much less useful than focused reports.
+- exact input SHA-256 and provenance;
+- package/version when Android build tools are available;
+- APK/native/Dex inventory;
+- `libapp.so` / `libGEM.so` hashes;
+- required Flutter search/navigation semantic markers;
+- required `libGEM` exports and successful machine-code-shape discovery of its Dart/PostCObject globals;
+- native navigation/simulation routing markers;
+- delta against `baseline/known-good.json`.
 
-## Frida limitation
+The known-good delta distinguishes a harmless binary/version change from a missing required anchor. A new version with different hashes but intact required surfaces may be attempted. Missing required surfaces are refused.
 
-CI can fetch/use Frida Gadget for the build and Blutter can generate a Frida script template. A real runtime Frida trace still requires a booted Android target on which the application actually launches. Static CI forensics must not be presented as a substitute for the later physical-device drive test.
+## Automatic failure handoff
+
+Any compatibility refusal or later build failure starts the forensics job. It performs full Apktool/JADX passes, focused native ELF analysis, Blutter AOT analysis when supported, and saves the failed build-stage evidence in the same final handoff.
+
+The final artifact is named roughly:
+
+```text
+CairoDrive-FUTURE-APK-HANDOFF-<commit>
+```
+
+Send `FUTURE_APK_REPORT.txt` first. It includes the prior build-log tail and an automatic failure-subsystem classification. It is accompanied by machine-readable `BUILD_FAILURE_CLASSIFICATION.json`, `preflight.json`, `compatibility-delta.json`, `FORENSICS_STATUS.json`, prior build logs, toolchain provenance, semantic JADX/Blutter matches, decoded manifest, and focused native reports.
+
+Full native string/symbol reports are generated for `libapp.so`, `libGEM.so`, and `libflutter.so` by default. A manual workflow dispatch can enable `full_native_forensics` for every arm64 `.so`; this is intentionally optional because the artifact can become very large.
+
+## Runtime limitation
+
+GitHub static CI can decompile, inspect, build Frida Gadget payloads, analyze Flutter AOT with Blutter, and generate Frida material. A true runtime Frida trace still requires Android where the app actually launches. CI does not pretend a static Ubuntu runner proves on-device navigation behavior.
+
+## Baseline policy
+
+`baseline/known-good.json` is deliberately not auto-promoted merely because an APK compiled. A build can be structurally valid yet still behave incorrectly on a real phone. Promote/update the known-good baseline only after a real device smoke/drive test confirms the new upstream version.

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
-APK="${1:-CairoDrive-v22.3.apk}"
+PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-22.3}"
+PATCH_VERSION_SAFE="$(printf '%s' "$PATCH_VERSION" | tr -cs '0-9A-Za-z._-' '_')"
+APK="${1:-CairoDrive-v${PATCH_VERSION_SAFE}.apk}"
 command -v adb >/dev/null || { echo 'ERROR: adb missing' >&2; exit 1; }
 [[ -f "$APK" ]] || { echo "ERROR: $APK missing" >&2; exit 1; }
 adb get-state >/dev/null

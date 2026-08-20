@@ -5,7 +5,8 @@ APK="${1:?usage: ci/future-forensics.sh /path/base.apk [outdir]}"
 OUT="${2:-$ROOT/forensics}"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-mkdir -p "$OUT/logs" "$OUT/native"
+mkdir -p "$OUT/logs" "$OUT/native" "$OUT/prior-build"
+FULL_NATIVE="${FULL_NATIVE_FORENSICS:-0}"
 REPORT="$OUT/FUTURE_APK_REPORT.txt"
 : > "$REPORT"
 
@@ -18,6 +19,24 @@ runlog(){
   echo "[$name] exit=$rc" | tee -a "$REPORT"
   return 0
 }
+
+section 'PRIOR CI / BUILD FAILURE CONTEXT'
+if [[ -d "$OUT/prior-build" ]]; then
+  python3 "$ROOT/tools/classify_build_failure.py" "$OUT/prior-build" --out "$OUT/BUILD_FAILURE_CLASSIFICATION.json" > "$OUT/logs/build-failure-classification.log" 2>&1 || true
+  if [[ -f "$OUT/BUILD_FAILURE_CLASSIFICATION.json" ]]; then
+    python3 - "$OUT/BUILD_FAILURE_CLASSIFICATION.json" <<'PYCLASS' | tee -a "$REPORT"
+import json,sys
+d=json.load(open(sys.argv[1])); print('build_failure_primary='+str(d.get('primary'))); print('build_failure_categories='+','.join(d.get('categories',[])))
+PYCLASS
+  fi
+  BUILD_LOG="$(find "$OUT/prior-build" -type f -name 'BUILD_STAGE.log' -print -quit 2>/dev/null || true)"
+  if [[ -n "$BUILD_LOG" ]]; then
+    echo '-- tail BUILD_STAGE.log --' | tee -a "$REPORT"
+    tail -n 180 "$BUILD_LOG" | tee -a "$REPORT"
+  fi
+else
+  echo 'prior_build_evidence=not_available' | tee -a "$REPORT"
+fi
 
 section 'IDENTITY / INPUT'
 echo "generated_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a "$REPORT"
@@ -38,7 +57,28 @@ python3 "$ROOT/ci/verify-target-routing-surface.py" "$APK" > "$OUT/logs/routing-
 ROUTE=$?
 echo "preflight_exit=$PRE" | tee -a "$REPORT"
 echo "routing_surface_exit=$ROUTE" | tee -a "$REPORT"
+DELTA=127
+if [[ -f "$OUT/preflight.json" && -f "$ROOT/baseline/known-good.json" ]]; then
+  python3 "$ROOT/tools/compatibility_delta.py" "$OUT/preflight.json" --baseline "$ROOT/baseline/known-good.json" --out "$OUT/compatibility-delta.json" > "$OUT/logs/compatibility-delta.log" 2>&1
+  DELTA=$?
+fi
+echo "compatibility_delta_exit=$DELTA" | tee -a "$REPORT"
 [[ -f "$OUT/preflight.json" ]] && cat "$OUT/preflight.json" >> "$REPORT"
+[[ -f "$OUT/compatibility-delta.json" ]] && { echo '-- baseline delta --' >> "$REPORT"; cat "$OUT/compatibility-delta.json" >> "$REPORT"; }
+
+section 'KNOWN-GOOD APK DELTA'
+BASELINE_APK="$WORK/known-good-base.apk"
+if [[ -f "$ROOT/base_apk_parts/SHA256.txt" ]]; then
+  if "$ROOT/ci/reassemble-base-apk.sh" "$BASELINE_APK" > "$OUT/logs/baseline-reassemble.log" 2>&1; then
+    python3 "$ROOT/tools/apk_inventory_delta.py" "$BASELINE_APK" "$APK" --out "$OUT/APK_INVENTORY_DELTA.json" > "$OUT/logs/apk-inventory-delta.log" 2>&1 || true
+    if [[ -f "$OUT/APK_INVENTORY_DELTA.json" ]]; then
+      python3 - "$OUT/APK_INVENTORY_DELTA.json" <<'PY' | tee -a "$REPORT"
+import json,sys
+d=json.load(open(sys.argv[1])); print('apk_inventory_delta_counts='+json.dumps(d.get('counts',{}),sort_keys=True)); print('key_sha256='+json.dumps(d.get('key_sha256',{}),sort_keys=True))
+PY
+    fi
+  fi
+fi
 
 section 'APK INVENTORY'
 python3 - "$APK" "$OUT" <<'PY' >> "$REPORT" 2>"$OUT/logs/zip-inventory.err"
@@ -59,18 +99,26 @@ PY
 mkdir -p "$WORK/native-root"
 unzip -q -o "$APK" 'lib/arm64-v8a/*.so' -d "$WORK/native-root" 2>"$OUT/logs/native-extract.log" || true
 section 'NATIVE ELF SUMMARY'
+INV="$OUT/native/NATIVE_INVENTORY.tsv"
+printf 'name\tsize_bytes\tsha256\tdetailed\n' > "$INV"
 if [[ -d "$WORK/native-root/lib/arm64-v8a" ]]; then
   while IFS= read -r -d '' so; do
     n="$(basename "$so")"; stem="${n%.so}"
-    echo "--- $n ---" | tee -a "$REPORT"
-    sha256sum "$so" | tee -a "$REPORT"
+    size="$(stat -c '%s' "$so")"; hash="$(sha256sum "$so" | awk '{print $1}')"
+    detailed=0
+    case "$n" in libapp.so|libGEM.so|libflutter.so) detailed=1;; esac
+    [[ "$FULL_NATIVE" == 1 ]] && detailed=1
+    printf '%s\t%s\t%s\t%s\n' "$n" "$size" "$hash" "$detailed" >> "$INV"
+    echo "--- $n size=$size sha256=$hash detailed=$detailed ---" | tee -a "$REPORT"
     file "$so" | tee -a "$REPORT"
     readelf -h "$so" > "$OUT/native/${stem}.elf-header.txt" 2>&1 || true
     readelf -lW "$so" > "$OUT/native/${stem}.program-headers.txt" 2>&1 || true
     readelf -dW "$so" > "$OUT/native/${stem}.dynamic.txt" 2>&1 || true
-    readelf -Ws "$so" > "$OUT/native/${stem}.symbols.txt" 2>&1 || true
-    nm -D "$so" > "$OUT/native/${stem}.nm.txt" 2>&1 || true
-    strings -a -n 6 "$so" > "$OUT/native/${stem}.strings.txt" 2>&1 || true
+    if (( detailed )); then
+      readelf -Ws "$so" > "$OUT/native/${stem}.symbols.txt" 2>&1 || true
+      nm -D "$so" > "$OUT/native/${stem}.nm.txt" 2>&1 || true
+      strings -a -n 6 "$so" > "$OUT/native/${stem}.strings.txt" 2>&1 || true
+    fi
     printf 'RELRO=' | tee -a "$REPORT"; (grep -q 'GNU_RELRO' "$OUT/native/${stem}.program-headers.txt" && echo yes || echo no) | tee -a "$REPORT"
     printf 'GNU_STACK=' | tee -a "$REPORT"; (grep 'GNU_STACK' "$OUT/native/${stem}.program-headers.txt" | head -1 || echo unknown) | tee -a "$REPORT"
   done < <(find "$WORK/native-root/lib/arm64-v8a" -maxdepth 1 -type f -name '*.so' -print0 | sort -z)
@@ -129,13 +177,16 @@ if [[ -d "$WORK/blutter" ]]; then
     "$WORK/blutter" 2>/dev/null | head -n 1200 > "$OUT/BLUTTER_SEMANTIC_MATCHES.txt" || true
 fi
 
+section 'TOOLCHAIN PROVENANCE'
+"$ROOT/ci/toolchain-report.sh" "$OUT/TOOLCHAIN_PROVENANCE.txt" >> "$REPORT" 2>&1 || true
+
 section 'PATCHER REPOSITORY SELFTEST'
 "$ROOT/verify_patcher.sh" > "$OUT/logs/verify-patcher.log" 2>&1
 VERIFY_RC=$?
 echo "verify_patcher_exit=$VERIFY_RC" | tee -a "$REPORT"
 
 section 'DIAGNOSIS POINTERS'
-if (( PRE != 0 || ROUTE != 0 )); then
+if (( PRE != 0 || ROUTE != 0 || DELTA == 42 )); then
   echo 'classification=UPSTREAM_STRUCTURAL_CHANGE' | tee -a "$REPORT"
   echo 'action=Patch was correctly refused. Inspect preflight.json, routing-surface.log, JADX_SEMANTIC_MATCHES.txt, BLUTTER_SEMANTIC_MATCHES.txt, and native/*.strings.txt.' | tee -a "$REPORT"
 else
@@ -148,12 +199,14 @@ artifact_hint=Send FUTURE_APK_REPORT.txt first. If needed, also send preflight.j
 TXT
 
 # Compact machine-readable index; do not upload the enormous full decompile trees.
-python3 - "$OUT" "$PRE" "$ROUTE" "$APKTOOL_RC" "$JADX_RC" "$BLUTTER_RC" "$VERIFY_RC" <<'PY'
+CAIRODRIVE_DELTA_RC="$DELTA" python3 - "$OUT" "$PRE" "$ROUTE" "$APKTOOL_RC" "$JADX_RC" "$BLUTTER_RC" "$VERIFY_RC" <<'PY'
 import json,os,sys
 out=sys.argv[1]
 vals=list(map(int,sys.argv[2:]))
 keys=['preflight','routing_surface','apktool','jadx','blutter','verify_patcher']
-json.dump({k:v for k,v in zip(keys,vals)},open(os.path.join(out,'FORENSICS_STATUS.json'),'w'),indent=2)
+d={k:v for k,v in zip(keys,vals)}
+d['compatibility_delta']=int(os.environ.get('CAIRODRIVE_DELTA_RC','127'))
+json.dump(d,open(os.path.join(out,'FORENSICS_STATUS.json'),'w'),indent=2)
 PY
 
 echo | tee -a "$REPORT"

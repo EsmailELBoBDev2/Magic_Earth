@@ -54,6 +54,37 @@ grep -q 'discover_gem_globals.py' payload/build_patch.sh
 grep -q 'safe signature count' tools/patch_search_debounce.py
 grep -q 'MAX_RESPONSE_BYTES' payload/helper/com/cairodrive/search/AsyncHttp.java
 grep -q 'endpoint not allowlisted' payload/helper/com/cairodrive/search/AsyncHttp.java
+grep -q 'ArrayBlockingQueue<Runnable>(128)' payload/helper/com/cairodrive/log/CairoLog.java
+
+
+# Smart-update / fail-safe invariants.
+[[ -x SMART_UPDATE.sh ]]
+[[ -f DROP_NEW_APK_HERE/README.txt ]]
+[[ -f baseline/known-good.json ]]
+[[ -x tools/compatibility_delta.py ]]
+[[ -x tools/apk_inventory_delta.py ]]
+[[ -x tools/classify_build_failure.py ]]
+grep -q 'AGENT_REL=' payload/build_patch.sh
+grep -q 'frida-compile "$AGENT_REL"' payload/build_patch.sh
+! grep -q 'frida-compile "$WORK/cairodrive-agent.js"' payload/build_patch.sh
+grep -q 'compatibility_delta.py' .github/workflows/build.yml
+grep -q 'discover_gem_globals.py' .github/workflows/build.yml
+grep -q 'gem_discovery_rc' .github/workflows/build.yml
+grep -q 'CairoDrive-FUTURE-APK-HANDOFF' .github/workflows/build.yml
+grep -q 'actions/download-artifact@v8' .github/workflows/build.yml
+grep -q 'actions/cache@v5' .github/workflows/build.yml
+grep -q 'npm ci --no-audit --no-fund' payload/build_patch.sh
+grep -q 'PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-22.3}"' build_cairodrive.sh
+grep -q 'APK="${1:-$ROOT/input/base.apk}"' build_cairodrive.sh
+grep -q 'APK="${1:-$ROOT/input/base.apk}"' build_and_update.sh
+grep -q 'BOOT agent=' watch_search.sh
+grep -q 'BOOT agent=' watch_nav.sh
+grep -q 'CAIRODRIVE_PATCH_VERSION:' .github/workflows/build.yml
+python3 - <<'PY'
+import json
+p=json.load(open('payload/package.json'))
+assert p.get('allowScripts',{}).get('frida@17.17.0') is True
+PY
 
 # Syntax/selftests.
 for s in ./*.sh ci/*.sh tools/*.sh payload/build_patch.sh experiments/*.sh; do [[ -f "$s" ]] && bash -n "$s"; done

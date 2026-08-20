@@ -40,8 +40,11 @@ public final class AsyncHttp {
         if (!"https".equalsIgnoreCase(u.getProtocol())) throw new SecurityException("HTTPS required");
         int port=u.getPort(); if (port != -1 && port != 443) throw new SecurityException("custom port blocked");
         String host=u.getHost(); String path=u.getPath()==null?"":u.getPath();
-        boolean places="places.googleapis.com".equalsIgnoreCase(host) && path.startsWith("/v1/places");
-        boolean routes="routes.googleapis.com".equalsIgnoreCase(host) && path.startsWith("/directions/v2");
+        boolean places="places.googleapis.com".equalsIgnoreCase(host) && (
+            path.equals("/v1/places:autocomplete") || path.equals("/v1/places:searchText") ||
+            path.equals("/v1/places:searchNearby") || path.startsWith("/v1/places/")
+        );
+        boolean routes="routes.googleapis.com".equalsIgnoreCase(host) && path.equals("/directions/v2:computeRoutes");
         if (!places && !routes) throw new SecurityException("endpoint not allowlisted: "+host+path);
         return u;
     }
@@ -50,7 +53,7 @@ public final class AsyncHttp {
             State s=e.getValue(); if (s.done || s.cancelled) STATES.remove(e.getKey(),s);
         }
     }
-    private static long newState(State s) {
+    private static synchronized long newState(State s) {
         reap(); if (STATES.size() >= MAX_STATES) throw new IllegalStateException("too many pending HTTP states");
         long id=NEXT.getAndIncrement(); STATES.put(id,s); return id;
     }
@@ -80,9 +83,9 @@ public final class AsyncHttp {
         final State state=new State(); final long id=newState(state);
         state.future=ex.submit(new Runnable(){@Override public void run(){ HttpsURLConnection conn=null; try {
             if(state.cancelled)return; conn=(HttpsURLConnection)url.openConnection(); state.connection=conn; conn.setRequestMethod("POST");
-            conn.setConnectTimeout(Math.max(500,Math.min(15000,ct))); conn.setReadTimeout(Math.max(500,Math.min(20000,rt))); conn.setUseCaches(false);
+            conn.setConnectTimeout(Math.max(500,Math.min(15000,ct))); conn.setReadTimeout(Math.max(500,Math.min(20000,rt))); conn.setUseCaches(false); conn.setInstanceFollowRedirects(false);
             conn.setRequestProperty("Accept","application/json"); conn.setRequestProperty("Accept-Encoding","gzip"); applyHeaders(conn,hj);
-            conn.setDoOutput(true); OutputStream os=conn.getOutputStream(); os.write(bytes); os.close(); if(state.cancelled)return;
+            conn.setDoOutput(true); conn.setFixedLengthStreamingMode(bytes.length); OutputStream os=conn.getOutputStream(); os.write(bytes); os.close(); if(state.cancelled)return;
             int status=conn.getResponseCode(); InputStream in=(status>=200&&status<300)?conn.getInputStream():conn.getErrorStream();
             if(in!=null && "gzip".equalsIgnoreCase(conn.getContentEncoding()))in=new GZIPInputStream(in);
             String result=readLimited(in,state); if(!state.cancelled){state.status=status;state.body=result;}
@@ -95,7 +98,7 @@ public final class AsyncHttp {
         final URL url; try{url=checkedUrl(us);}catch(Exception e){throw new IllegalArgumentException(e);} final State state=new State(); final long id=newState(state);
         state.future=PLACES_EXECUTOR.submit(new Runnable(){@Override public void run(){HttpsURLConnection conn=null;try{
             if(state.cancelled)return;conn=(HttpsURLConnection)url.openConnection();state.connection=conn;conn.setRequestMethod("GET");
-            conn.setConnectTimeout(Math.max(500,Math.min(15000,ct)));conn.setReadTimeout(Math.max(500,Math.min(20000,rt)));conn.setUseCaches(false);
+            conn.setConnectTimeout(Math.max(500,Math.min(15000,ct)));conn.setReadTimeout(Math.max(500,Math.min(20000,rt)));conn.setUseCaches(false);conn.setInstanceFollowRedirects(false);
             conn.setRequestProperty("Accept","application/json");conn.setRequestProperty("Accept-Encoding","gzip");applyHeaders(conn,hj);
             int status=conn.getResponseCode();InputStream in=(status>=200&&status<300)?conn.getInputStream():conn.getErrorStream();
             if(in!=null&&"gzip".equalsIgnoreCase(conn.getContentEncoding()))in=new GZIPInputStream(in);String result=readLimited(in,state);

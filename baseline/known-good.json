@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "status": "drive-test baseline / exact analyzed upstream",
+  "upstream": {
+    "package": "com.generalmagic.magicearth",
+    "versionName": "7.1.26.26.21DB1F1B.3C81F7001",
+    "versionCode": "2026114516",
+    "apk_sha256": "936cff2a8cffcfad96cc68d76a22c366d2c038e5484a2c974e0d88f36906d4de",
+    "libapp_sha256": "558e04e9a41aca50a3409ee7640785eedfefb23ff1fe787865b7595f029e19a4",
+    "libgem_sha256": "5ff2d70bd8e880d752d1e9ae4dcb8f57bcfc1b5f1e0080122f962a290db9d900"
+  },
+  "semantic_markers": {
+    "SearchService": true,
+    "SearchRepositoryImpl": true,
+    "NavigationService": true,
+    "RoutingService": true,
+    "NavigationInstruction": true,
+    "LandmarkList": true
+  },
+  "gem_exports": {
+    "native_call": true,
+    "native_call_createObject": true,
+    "set_dart_port": true
+  },
+  "routing_surface": {
+    "ERoutePathAlgorithm": true,
+    "MagicEarth": true,
+    "ExternalCh": true,
+    "startNavigation": true,
+    "startSimulation": true
+  }
+}

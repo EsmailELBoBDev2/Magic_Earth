@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-APK="${1:-$HOME/Downloads/magic-earth-7-1-26-26-21db1f1b-3c81f7001.apk}"
+APK="${1:-$ROOT/input/base.apk}"
+PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-22.3}"
+PATCH_VERSION_SAFE="$(printf '%s' "$PATCH_VERSION" | tr -cs '0-9A-Za-z._-' '_')"
 GADGET="${2:-$HOME/.cache/frida/gadget-android-arm64.so}"
-OUT="${3:-$HOME/Downloads/MagicEarth-CairoDrive-v22.3-complete-drive-assist.apk}"
+OUT="${3:-$HOME/Downloads/MagicEarth-CairoDrive-v${PATCH_VERSION_SAFE}-complete-drive-assist.apk}"
 PKG="com.generalmagic.magicearth"
 
 "$ROOT/verify_patcher.sh"
@@ -32,7 +34,7 @@ adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
 sleep 3
 
 echo '=== startup evidence ==='
-adb logcat -d -v brief -s cairodrive:I | grep -E 'BOOT agent=v22.3-kiss-fast-reroute|KEY_STATE|IDENTITY_READY|GEM_FILTER|MAGICLANE_TRAFFIC|NAV_ENUMS|LANE_ASSIST_READY|CAIRODRIVE_READY' | tail -n 60 || true
+adb logcat -d -v brief -s cairodrive:I | grep -E 'BOOT agent=|KEY_STATE|IDENTITY_READY|GEM_FILTER|MAGICLANE_TRAFFIC|NAV_ENUMS|LANE_ASSIST_READY|CAIRODRIVE_READY' | tail -n 60 || true
 
 echo
 if [[ -n "${GOOGLE_PLACES_API_KEY:-}" ]]; then

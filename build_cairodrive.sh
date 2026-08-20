@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-APK="${1:-$HOME/Downloads/magic-earth-7-1-26-26-21db1f1b-3c81f7001.apk}"
+APK="${1:-$ROOT/input/base.apk}"
+PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-22.3}"
+PATCH_VERSION_SAFE="$(printf '%s' "$PATCH_VERSION" | tr -cs '0-9A-Za-z._-' '_')"
 TARGET_PACKAGE="${TARGET_PACKAGE:-com.cairodrive.app}"
 APP_LABEL="${APP_LABEL:-CairoDrive}"
 OUTDIR="${OUTDIR:-$ROOT/out}"
@@ -30,7 +32,7 @@ prepare_keystore
 STOREPASS="${ANDROID_KEYSTORE_PASSWORD:-cairodrive-drive-test-2026}"; ALIAS="${ANDROID_KEY_ALIAS:-cairodrive}"; KEYPASS="${ANDROID_KEY_PASSWORD:-$STOREPASS}"
 keytool -list -keystore "$KS" -storepass "$STOREPASS" -alias "$ALIAS" >/dev/null
 
-# Build v22.3 against original package first; intermediate signer is irrelevant.
+# Build against the materialized upstream APK first; intermediate signer is irrelevant.
 TMPKS="$WORK/intermediate.keystore"
 ( cd "$ROOT/payload" && CAIRODRIVE_KEYSTORE="$TMPKS" ./build_patch.sh "$APK" "$GADGET" "$WORK/patched-oldpkg.apk" )
 
@@ -43,7 +45,7 @@ p=sys.argv[1]; s=open(p,encoding='utf-8').read(); s=re.sub(r'(?m)^renameManifest
 PY
 apktool b -o "$WORK/repacked-unsigned.apk" "$WORK/decoded" >/dev/null
 zipalign -f 4 "$WORK/repacked-unsigned.apk" "$WORK/CairoDrive-aligned.apk"
-FINAL_APK="$OUTDIR/CairoDrive-v22.3.apk"
+FINAL_APK="$OUTDIR/CairoDrive-v${PATCH_VERSION_SAFE}.apk"
 apksigner sign --ks "$KS" --ks-pass "pass:$STOREPASS" --key-pass "pass:$KEYPASS" --ks-key-alias "$ALIAS" --out "$FINAL_APK" "$WORK/CairoDrive-aligned.apk"
 apksigner verify --verbose --print-certs "$FINAL_APK" >/dev/null
 PKG="$($AAPT2 dump badging "$FINAL_APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
@@ -53,14 +55,14 @@ python3 "$ROOT/tools/compare_resource_ids.py" "$AAPT2" "$WORK/patched-oldpkg.apk
 CERT_SHA1="$(keytool -list -v -keystore "$KS" -storepass "$STOREPASS" -alias "$ALIAS" 2>/dev/null | sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | head -1)"
 CERT_SHA256="$(keytool -list -v -keystore "$KS" -storepass "$STOREPASS" -alias "$ALIAS" 2>/dev/null | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1)"
 
-FINAL_AAB="$OUTDIR/CairoDrive-v22.3.aab"
+FINAL_AAB="$OUTDIR/CairoDrive-v${PATCH_VERSION_SAFE}.aab"
 BUNDLETOOL_JAR="${BUNDLETOOL_JAR:-}" "$ROOT/tools/build_aab.sh" "$WORK/CairoDrive-aligned.apk" "$FINAL_AAB" "$KS" "$ALIAS" "$STOREPASS" "$KEYPASS"
 UNIVERSAL="${FINAL_AAB%.aab}-universal.apk"
 UPKG="$($AAPT2 dump badging "$UNIVERSAL" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
 [[ "$UPKG" == "$TARGET_PACKAGE" ]] || { echo "ERROR: AAB universal package=$UPKG expected=$TARGET_PACKAGE" >&2; exit 1; }
 
 cat > "$OUTDIR/BUILD_REPORT.txt" <<EOF
-CairoDrive v22.3 Places + Traffic Advisory + Drive Assist
+CairoDrive v${PATCH_VERSION_SAFE} Places + Traffic Advisory + Drive Assist
 source_sha256=$(sha256sum "$APK"|awk '{print $1}')
 target_package=$TARGET_PACKAGE
 apk_sha256=$(sha256sum "$FINAL_APK"|awk '{print $1}')

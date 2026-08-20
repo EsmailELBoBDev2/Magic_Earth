@@ -17,3 +17,4 @@ forensics/
 .future-apk/
 __pycache__/
 *.pyc
+payload/.cairodrive-frida.*/

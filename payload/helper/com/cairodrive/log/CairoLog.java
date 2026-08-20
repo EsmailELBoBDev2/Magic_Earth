@@ -13,8 +13,10 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -29,11 +31,15 @@ public final class CairoLog {
     private static final long BUCKET_MS = 3L * 24L * 60L * 60L * 1000L;
     private static final long RETAIN_MS = 30L * 24L * 60L * 60L * 1000L;
     private static final long MAX_SEGMENT_BYTES = 24L * 1024L * 1024L;
-    private static final ExecutorService IO = Executors.newSingleThreadExecutor(r -> {
-        Thread t = new Thread(r, "cairodrive-log-writer");
-        t.setDaemon(true);
-        return t;
-    });
+    // Logging is best-effort. A single-thread executor with an unbounded queue can
+    // consume arbitrary memory during a log storm, so keep a small bounded backlog
+    // and discard the oldest pending log batch when disk I/O cannot keep up.
+    private static final ExecutorService IO = new ThreadPoolExecutor(
+        1, 1, 0L, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(128), r -> {
+            Thread t = new Thread(r, "cairodrive-log-writer");
+            t.setDaemon(true);
+            return t;
+        }, new ThreadPoolExecutor.DiscardOldestPolicy());
     private static volatile File dir;
     private static volatile long lastPruneAt;
     private static File openFile;

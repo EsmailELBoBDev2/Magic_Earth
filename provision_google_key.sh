@@ -46,7 +46,7 @@ for _ in $(seq 1 30); do
 done
 
 echo "=== key migration evidence ==="
-adb logcat -d -v brief -s cairodrive:I 2>/dev/null | grep -E 'BOOT agent=v22.3|KEY_STATE|IDENTITY_READY|CAIRODRIVE_READY' | tail -n 40 || true
+adb logcat -d -v brief -s cairodrive:I 2>/dev/null | grep -E 'BOOT agent=|KEY_STATE|IDENTITY_READY|CAIRODRIVE_READY' | tail -n 40 || true
 if [[ "$ok" -ne 1 ]]; then
   echo "GOOGLE KEY MIGRATION: NO" >&2
   exit 5

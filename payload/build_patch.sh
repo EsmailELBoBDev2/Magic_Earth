@@ -4,7 +4,10 @@ APK="${1:?usage: build_patch.sh SOURCE.apk FRIDA_GADGET OUT.apk}"
 GADGET="${2:?}"
 OUTAPK="${3:?}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+WORK="$(mktemp -d)"
+BUNDLE_DIR="$(mktemp -d "$ROOT/.cairodrive-frida.XXXXXX")"
+cleanup(){ rm -rf "$WORK" "$BUNDLE_DIR"; }
+trap cleanup EXIT INT TERM
 need(){ command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing command: $1" >&2; exit 1; }; }
 for c in node npm python3 unzip zip zipalign apksigner keytool javac jar sha256sum readelf; do need "$c"; done
 [[ -f "$APK" ]] || { echo "ERROR: APK not found: $APK" >&2; exit 1; }
@@ -27,7 +30,12 @@ POST_OFF="$(python3 -c 'import json,sys;print(hex(json.load(open(sys.argv[1]))["
 echo "    dart_port=$DART_OFF post_cobject_slot=$POST_OFF"
 
 cd "$ROOT"
-if [[ ! -d node_modules/frida-java-bridge || ! -x node_modules/.bin/frida-compile ]]; then npm install --no-audit --no-fund; fi
+export npm_config_fetch_retries="${npm_config_fetch_retries:-4}"
+export npm_config_fetch_retry_mintimeout="${npm_config_fetch_retry_mintimeout:-10000}"
+export npm_config_fetch_retry_maxtimeout="${npm_config_fetch_retry_maxtimeout:-60000}"
+if [[ ! -d node_modules/frida-java-bridge || ! -x node_modules/.bin/frida-compile ]]; then
+  if [[ -f package-lock.json ]]; then npm ci --no-audit --no-fund; else npm install --no-audit --no-fund; fi
+fi
 if [[ ! -f node_modules/frida/build/frida_binding.node ]]; then npm rebuild frida >/dev/null; fi
 
 mkdir -p "$WORK/helper-classes" "$WORK/helper-dex"
@@ -45,8 +53,10 @@ jar cf "$WORK/cairodrive-helper.jar" -C "$WORK/helper-classes" .
 node "$ROOT/../search_core_selftest.mjs"
 node "$ROOT/../nav_core_selftest.mjs"
 node "$ROOT/../traffic_core_selftest.mjs"
-cp "$ROOT/cairodrive-google-search-only.js" "$WORK/cairodrive-agent.js"
-python3 - "$WORK/cairodrive-agent.js" "$DART_OFF" "$POST_OFF" <<'PY'
+AGENT_REL="$(basename "$BUNDLE_DIR")/cairodrive-agent.js"
+AGENT="$ROOT/$AGENT_REL"
+cp "$ROOT/cairodrive-google-search-only.js" "$AGENT"
+python3 - "$AGENT" "$DART_OFF" "$POST_OFF" <<'PY'
 from pathlib import Path
 import sys
 p=Path(sys.argv[1]);s=p.read_text();vals={'__CAIRODRIVE_GEM_DART_PORT_OFFSET__':sys.argv[2],'__CAIRODRIVE_GEM_POST_COBJECT_SLOT_OFFSET__':sys.argv[3]}
@@ -58,7 +68,9 @@ for forbidden in ('__CAIRODRIVE_BUILD_GOOGLE_KEY__','__CAIRODRIVE_BUILD_GOOGLE_R
     if forbidden in s: raise SystemExit('ERROR: obsolete build-key marker remained')
 p.write_text(s)
 PY
-./node_modules/.bin/frida-compile "$WORK/cairodrive-agent.js" -o "$WORK/libgadget.script.so" -S -c
+# frida-compile 19.x enforces that the entrypoint lives under the project root.
+# Keep the generated agent in a temporary subdirectory of payload/ and pass a relative path.
+./node_modules/.bin/frida-compile "$AGENT_REL" -o "$WORK/libgadget.script.so" -S -c
 [[ -s "$WORK/libgadget.script.so" ]] || { echo 'ERROR: agent bundle missing' >&2; exit 1; }
 
 # Optional performance-only AOT patch. Unknown future compiler layouts simply
