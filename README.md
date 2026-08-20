@@ -34,3 +34,7 @@ GitHub Actions uploads `CairoDrive-v22.3-DRIVE-TEST-com.cairodrive.app` containi
 - deep reverse-engineering audit
 
 Google API credentials are **not embedded** in Git or build artifacts. They are provisioned after installation into app-private storage.
+
+## Updating to a future Magic Earth APK
+
+Keep the new APK whole outside Git and run `./UPDATE_APK.sh /path/to/new.apk`. Future APKs are SHA-pinned as private GitHub Release assets, avoiding Git's 100 MiB object limit and binary-history growth. CI tries the portable fail-closed patch automatically; incompatibility or build failure triggers a deep diagnostic artifact. See `FUTURE_APK_AUTOMATION.md`.

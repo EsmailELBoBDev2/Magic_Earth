@@ -13,3 +13,7 @@ payload/node_modules/
 keystore.b64
 .env
 .DS_Store
+forensics/
+.future-apk/
+__pycache__/
+*.pyc
