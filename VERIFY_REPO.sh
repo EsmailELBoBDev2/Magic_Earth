@@ -6,7 +6,7 @@ fail(){ echo "VERIFY_REPO: FAIL — $*" >&2; exit 1; }
 need(){ command -v "$1" >/dev/null 2>&1 || fail "missing local verifier command: $1"; }
 for c in bash python3 node sha256sum unzip zip cc keytool; do need "$c"; done
 
-# 1) Source APK parts are push-safe and reconstruct the exact analyzed APK.
+# 1) Source APK parts are push-safe and reconstruct the configured base APK.
 (cd base_apk_parts && sha256sum -c PARTS_SHA256SUMS.txt >/dev/null)
 while IFS= read -r -d '' f; do
   sz=$(stat -c %s "$f")
@@ -14,9 +14,11 @@ while IFS= read -r -d '' f; do
 done < <(find base_apk_parts -type f -name 'magic-earth-base.apk.part-*' -print0)
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 ./ci/reassemble-base-apk.sh "$TMP/base.apk" >/dev/null
-[[ "$(sha256sum "$TMP/base.apk" | awk '{print $1}')" == '936cff2a8cffcfad96cc68d76a22c366d2c038e5484a2c974e0d88f36906d4de' ]] || fail 'base APK hash mismatch'
+EXPECTED_BASE="$(tr -d '[:space:]' < base_apk_parts/BASE_APK_SHA256.txt)"
+[[ "$(sha256sum "$TMP/base.apk" | awk '{print $1}')" == "$EXPECTED_BASE" ]] || fail 'base APK hash mismatch'
 unzip -t "$TMP/base.apk" >/dev/null || fail 'base APK ZIP integrity'
-python3 ./ci/verify-target-routing-surface.py "$TMP/base.apk" >/dev/null || fail 'exact route/simulation surface'
+python3 ./tools/preflight.py "$TMP/base.apk" --report "$TMP/preflight.json" >/dev/null || fail 'base APK compatibility preflight'
+python3 ./ci/verify-target-routing-surface.py "$TMP/base.apk" >/dev/null || fail 'route/simulation surface'
 
 # 2) Code/selftests.
 node search_core_selftest.mjs >/dev/null
@@ -74,7 +76,7 @@ for f in README.md DEEP_REVERSE_ENGINEERING_AUDIT.md INSTALL_DRIVE_TEST.sh provi
 
 printf '%s\n' \
   'VERIFY_REPO: PASS' \
-  'exact base APK: PASS' \
+  'configured base APK: PASS' \
   'route/simulation target surface: PASS' \
   'search/nav/traffic/native-filter selftests: PASS' \
   'embedded-key injection + runtime override cleanup: PASS' \

@@ -10,8 +10,9 @@ BANNER="$ROOT/payload/helper/com/cairodrive/nav/NavBanner.java"
 AUTOCOMPLETE_PANEL="$ROOT/payload/helper/com/cairodrive/search/AutocompletePanel.java"
 FILTER="$ROOT/payload/libcairodrive_filter.so"
 CLOG="$ROOT/payload/helper/com/cairodrive/log/CairoLog.java"
+BOOTSTRAP="$ROOT/payload/helper/com/cairodrive/bootstrap/GadgetBootstrapProvider.java"
 
-for f in "$AG" "$SEARCH_CORE" "$NAV_CORE" "$TRAFFIC_CORE" "$HTTP" "$BANNER" "$AUTOCOMPLETE_PANEL" "$CLOG" "$FILTER" "$ROOT/payload/build_patch.sh" "$ROOT/provision_google_key.sh"; do
+for f in "$AG" "$SEARCH_CORE" "$NAV_CORE" "$TRAFFIC_CORE" "$HTTP" "$BANNER" "$AUTOCOMPLETE_PANEL" "$CLOG" "$BOOTSTRAP" "$FILTER" "$ROOT/payload/build_patch.sh" "$ROOT/provision_google_key.sh"; do
   [[ -s "$f" ]] || { echo "missing: $f" >&2; exit 1; }
 done
 
@@ -37,7 +38,9 @@ grep -q "CairoLog" "$AG"
 grep -q "BUCKET_MS = 3L" "$CLOG"
 grep -q "RETAIN_MS = 30L" "$CLOG"
 [[ -x "$ROOT/pull_logs.sh" ]]
-[[ -x "$ROOT/tools/patch_libflutter.py" ]]
+grep -q "System.loadLibrary(\"gadget\")" "$BOOTSTRAP"
+grep -q "GadgetBootstrapProvider" "$ROOT/tools/rewrite_manifest.py"
+! grep -q "patch_libflutter.py" "$ROOT/payload/build_patch.sh"
 grep -q "OSM_TRAFFIC_CALMING_QUEUED" "$AG"
 grep -q "traffic_calming=" "$AG"
 grep -q "LANDMARK_BASIC_POPULATED" "$AG"
@@ -222,6 +225,9 @@ grep -q "externalch-all" "$ROOT/experiments/run_route_algo_ab_simulation.py"
 grep -q "newer simplifiedMl/mlch enum names: absent" "$ROOT/ci/verify-target-routing-surface.py"
 ! grep -qiE "simplifiedMl|\bmlch\b" "$AG"
 grep -q "EXPECTED_LIBAPP_SHA256='558e04e9a41aca50a3409ee7640785eedfefb23ff1fe787865b7595f029e19a4'" "$ROOT/payload/build_patch.sh"
+grep -q 'future-compatible' "$ROOT/payload/build_patch.sh"
+grep -q 'FUTURE_COMPATIBLE_CANDIDATE' "$ROOT/tools/preflight.py"
+grep -q 'DART_POST_DISCOVERED' "$AG"
 grep -q "patch_search_debounce.py" "$ROOT/payload/build_patch.sh"
 grep -q "PATCHED =bytes.fromhex('00 32 80 d2')" "$ROOT/tools/patch_search_debounce.py"
 grep -q "com.cairodrive.app" "$ROOT/provision_google_key.sh"

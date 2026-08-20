@@ -5,7 +5,7 @@ APK="${1:-magic-earth-7-1-26-26-21db1f1b-3c81f7001.apk}"
 GADGET="${2:-$HOME/.cache/frida/gadget-android-arm64.so}"
 OUTAPK="${3:-MagicEarth-CairoDrive-v22.3-complete-drive-assist.apk}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-WORK="$(mktemp -d)"
+WORK="$(mktemp -d "$ROOT/.cairodrive-build.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 EXPECTED_LIBAPP_SHA256='558e04e9a41aca50a3409ee7640785eedfefb23ff1fe787865b7595f029e19a4'
 
@@ -54,7 +54,8 @@ javac --release 8 -cp "$ANDROID_JAR" -d "$WORK/helper-classes" \
   "$ROOT/helper/com/cairodrive/search/AsyncHttp.java" \
   "$ROOT/helper/com/cairodrive/search/AutocompletePanel.java" \
   "$ROOT/helper/com/cairodrive/nav/NavBanner.java" \
-  "$ROOT/helper/com/cairodrive/log/CairoLog.java"
+  "$ROOT/helper/com/cairodrive/log/CairoLog.java" \
+  "$ROOT/helper/com/cairodrive/bootstrap/GadgetBootstrapProvider.java"
 jar cf "$WORK/cairodrive-helper.jar" -C "$WORK/helper-classes" .
 "$D8" --min-api 21 --lib "$ANDROID_JAR" --output "$WORK/helper-dex" "$WORK/cairodrive-helper.jar" >/dev/null
 [[ -s "$WORK/helper-dex/classes.dex" ]] || { echo "CairoDrive helper DEX missing" >&2; exit 1; }
@@ -77,27 +78,43 @@ echo "==> Extracting exact Magic Earth target"
 unzip -q "$APK" -d "$WORK/root"
 [[ -f "$WORK/root/lib/arm64-v8a/libapp.so" ]] || { echo "libapp.so missing" >&2; exit 1; }
 ACTUAL_LIBAPP_SHA256="$(sha256sum "$WORK/root/lib/arm64-v8a/libapp.so" | awk '{print $1}')"
-[[ "$ACTUAL_LIBAPP_SHA256" == "$EXPECTED_LIBAPP_SHA256" ]] || {
-  echo "REFUSING: unsupported libapp.so" >&2
-  echo " expected: $EXPECTED_LIBAPP_SHA256" >&2
-  echo " actual:   $ACTUAL_LIBAPP_SHA256" >&2
-  exit 1
-}
-[[ ! -e "$WORK/root/classes7.dex" ]] || { echo "Original APK already contains classes7.dex; refusing to overwrite it." >&2; exit 1; }
+if [[ "$ACTUAL_LIBAPP_SHA256" == "$EXPECTED_LIBAPP_SHA256" ]]; then
+  CAIRODRIVE_TARGET_MODE=exact
+else
+  CAIRODRIVE_TARGET_MODE=future-compatible
+  echo "==> Future-target compatibility mode: libapp=$ACTUAL_LIBAPP_SHA256"
+  echo "    Exact binary-only optimizations will be skipped; exported/API hooks remain fail-open."
+fi
+DEX_TARGET="$(python3 - "$WORK/root" <<'PYDEX'
+import re,sys
+from pathlib import Path
+root=Path(sys.argv[1])
+nums=[]
+for p in root.glob('classes*.dex'):
+    m=re.fullmatch(r'classes(\d*)\.dex',p.name)
+    if not m: continue
+    nums.append(1 if m.group(1)=='' else int(m.group(1)))
+n=max(nums or [1])+1
+print(f'classes{n}.dex')
+PYDEX
+)"
+echo "==> Helper DEX slot: $DEX_TARGET"
 
 # Search-as-you-type is intentionally conservative: the exact stock 1000 ms
 # debounce is only reduced to 400 ms, while CairoDrive itself requires >=3
 # useful codepoints, serializes requests on one worker, and cancels stale calls.
-python3 "$ROOT/../tools/patch_search_debounce.py" "$WORK/root/lib/arm64-v8a/libapp.so"
-cp "$WORK/helper-dex/classes.dex" "$WORK/root/classes7.dex"
-python3 "$ROOT/../tools/patch_libflutter.py" \
-  "$WORK/root/lib/arm64-v8a/libflutter.so" "$WORK/libflutter.patched.so"
-cp "$WORK/libflutter.patched.so" "$WORK/root/lib/arm64-v8a/libflutter.so"
+if [[ "$CAIRODRIVE_TARGET_MODE" == exact ]]; then
+  python3 "$ROOT/../tools/patch_search_debounce.py" "$WORK/root/lib/arm64-v8a/libapp.so"
+else
+  echo "==> Skipping exact-offset search debounce patch on future target"
+fi
+cp "$WORK/helper-dex/classes.dex" "$WORK/root/$DEX_TARGET"
+echo "==> Gadget load bootstrap: private ContentProvider (no libflutter binary patch)"
 cp "$GADGET" "$WORK/root/lib/arm64-v8a/libgadget.so"
 cp "$ROOT/libgadget.config.so" "$WORK/root/lib/arm64-v8a/libgadget.config.so"
 cp "$WORK/libgadget.script.so" "$WORK/root/lib/arm64-v8a/libgadget.script.so"
 cp "$ROOT/libcairodrive_filter.so" "$WORK/root/lib/arm64-v8a/libcairodrive_filter.so"
-python3 "$ROOT/patch_manifest_extract.py" "$WORK/root/AndroidManifest.xml"
+echo "==> Manifest native-lib extraction will be set during decoded CairoDrive repack"
 rm -rf "$WORK/root/META-INF"
 
 (

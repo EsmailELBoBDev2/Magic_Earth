@@ -20,3 +20,6 @@ keystore.b64
 !ci/test-signing/cairodrive-drive-test.jks
 __pycache__/
 *.py[cod]
+
+# Frida compiler temporary project-local build dirs
+payload/.cairodrive-build.*

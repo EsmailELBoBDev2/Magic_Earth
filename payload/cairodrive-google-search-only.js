@@ -716,18 +716,60 @@ function pushLandmark(listId,landmarkId) {
   callGemRaw('{"id":'+listId+',"class":"LandmarkList","method":"push_back","args":'+landmarkId+',"dependencyId":-1}',false);
 }
 
+let __setDartPortAddr=null;
+function executablePointer(p){
+  try{const r=Process.findRangeByAddress(p);return !!(r&&String(r.protection||'').includes('x'));}catch(_){return false;}
+}
+function discoverPostCObjectFromSetDartPort(addr){
+  // Version-adaptive discovery: set_dart_port loads a pointer-to-pointer from
+  // a module global immediately before BLR. Decode that tiny exported function
+  // instead of hard-coding a libGEM global offset.
+  try{
+    let pc=addr, pages=new Map(), slots=new Map(), deref=new Map();
+    for(let i=0;i<48;i++){
+      const ins=Instruction.parse(pc), op=String(ins.opStr||'').toLowerCase();
+      let m;
+      if(ins.mnemonic==='adrp' && (m=op.match(/^([xw][0-9]+),\s*#?(0x[0-9a-f]+)$/))){
+        pages.set(m[1].replace(/^w/,'x'),ptr(m[2]));
+      } else if(ins.mnemonic==='ldr' && (m=op.match(/^([xw][0-9]+),\s*\[([xw][0-9]+),\s*#?(0x[0-9a-f]+)\]$/))){
+        const dst=m[1].replace(/^w/,'x'), base=m[2].replace(/^w/,'x');
+        if(dst===base && pages.has(base)) slots.set(dst,pages.get(base).add(parseInt(m[3],16)));
+      } else if(ins.mnemonic==='ldr' && (m=op.match(/^([xw][0-9]+),\s*\[([xw][0-9]+)\]$/))){
+        const dst=m[1].replace(/^w/,'x'), base=m[2].replace(/^w/,'x');
+        if(dst===base && slots.has(base)) deref.set(dst,slots.get(base));
+      } else if(ins.mnemonic==='blr' && (m=op.match(/^([xw][0-9]+)$/))){
+        const reg=m[1].replace(/^w/,'x'), slotAddr=deref.get(reg);
+        if(slotAddr){
+          const holder=slotAddr.readPointer();
+          if(!holder.isNull()){
+            const fp=holder.readPointer();
+            if(!fp.isNull() && executablePointer(fp)){
+              log(`DART_POST_DISCOVERED setPortOff=${addr.sub(gem.base)} slotOff=${slotAddr.sub(gem.base)}`);
+              return new NativeFunction(fp,'bool',['int64','pointer']);
+            }
+          }
+        }
+      }
+      pc=pc.add(ins.size);
+    }
+  }catch(e){log(`DART_POST_DISCOVERY_ERROR ${String(e)}`);}
+  return null;
+}
 function resolveDartPortAndPoster() {
   if(!gem)return false;
   try {
-    if(!dartPort) {
+    if(!postCObject && __setDartPortAddr) postCObject=discoverPostCObjectFromSetDartPort(__setDartPortAddr);
+    // Exact-target fallback only. Future builds never consume these offsets.
+    const exactSetPort=__setDartPortAddr && __setDartPortAddr.sub(gem.base).toString()==='0x296b130';
+    if(!dartPort && exactSetPort) {
       const p=gem.base.add(0x2d1b5f0).readS64();
       if(p.toString()!=='0')dartPort=p;
     }
-    if(!postCObject) {
-      const slot=gem.base.add(0x2b6d5e8).readPointer();
-      if(!slot.isNull()) {
-        const fp=slot.readPointer();
-        if(!fp.isNull())postCObject=new NativeFunction(fp,'bool',['int64','pointer']);
+    if(!postCObject && exactSetPort) {
+      const holder=gem.base.add(0x2b6d5e8).readPointer();
+      if(!holder.isNull()) {
+        const fp=holder.readPointer();
+        if(!fp.isNull()&&executablePointer(fp))postCObject=new NativeFunction(fp,'bool',['int64','pointer']);
       }
     }
   } catch(e) { log(`DART_PORT_ERROR ${String(e)}`); }
@@ -2306,6 +2348,7 @@ function installGem(m) {
   const nativeCallAddr=m.getExportByName('native_call');
   nativeCreate=new NativeFunction(m.getExportByName('native_call_createObject'),'pointer',['pointer','int64']);
   const setPortAddr=m.getExportByName('set_dart_port');
+  __setDartPortAddr=setPortAddr;
   const libc=Process.getModuleByName('libc.so');
   libcFree=new NativeFunction(libc.getExportByName('free'),'void',['pointer']);
   libcStrdup=new NativeFunction(libc.getExportByName('strdup'),'pointer',['pointer']);

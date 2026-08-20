@@ -78,11 +78,24 @@ def main():
             if v and v.startswith(old) and el.tag.split('}')[-1] not in COMPONENTS:
                 el.set(k,args.new_package+v[len(old):])
 
+    # Generic early Gadget bootstrap. This replaces the old exact-libflutter
+    # binary patch and therefore survives ordinary Flutter engine updates.
+    provider=ET.Element('provider')
+    provider.set(A+'name','com.cairodrive.bootstrap.GadgetBootstrapProvider')
+    provider.set(A+'authorities',args.new_package+'.cairodrive.gadget.bootstrap')
+    provider.set(A+'exported','false')
+    provider.set(A+'initOrder','1000000000')
+    # Avoid duplicating it if a decoded APK is rebuilt twice.
+    exists=any((el.tag.split('}')[-1]=='provider' and el.get(A+'name')=='com.cairodrive.bootstrap.GadgetBootstrapProvider') for el in app)
+    if not exists:
+        app.insert(0,provider)
+
     # CairoDrive stores its runtime-restricted Google key in private app storage.
     # Disable Android backup for the side-by-side test package so that private
     # state is not copied to cloud/device backup. This does not change stock
     # Magic Earth because the original package is untouched.
     app.set(A+'allowBackup','false')
+    app.set(A+'extractNativeLibs','true')
 
     # Manifest hygiene from the exact 7.1.26.26 target: POST_NOTIFICATIONS is
     # declared twice and `Manifest.permission.CAPTURE_AUDIO_OUTPUT` is a literal
@@ -111,6 +124,7 @@ def main():
     print(f'manifest package rewritten: {old} -> {args.new_package}')
     print('component class names preserved against original package namespace')
     print(f'application label: {args.label}')
-    print('security: allowBackup=false; duplicate/invalid uses-permission entries removed')
+    print('bootstrap: private GadgetBootstrapProvider added; no libflutter binary patch required')
+    print('security: allowBackup=false; extractNativeLibs=true; duplicate/invalid uses-permission entries removed')
 
 if __name__=='__main__': main()

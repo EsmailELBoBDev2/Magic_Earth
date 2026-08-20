@@ -3,7 +3,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-$ROOT/input/base.apk}"
 PARTS="$ROOT/base_apk_parts"
-EXPECTED='936cff2a8cffcfad96cc68d76a22c366d2c038e5484a2c974e0d88f36906d4de'
+EXPECTED_FILE="$PARTS/BASE_APK_SHA256.txt"
+[[ -s "$EXPECTED_FILE" ]] || { echo "ERROR: missing $EXPECTED_FILE" >&2; exit 2; }
+EXPECTED="$(tr -d '[:space:]' < "$EXPECTED_FILE")"
+[[ "$EXPECTED" =~ ^[0-9a-fA-F]{64}$ ]] || { echo "ERROR: invalid base APK SHA256 file" >&2; exit 2; }
 mkdir -p "$(dirname "$OUT")"
 (cd "$PARTS" && sha256sum -c PARTS_SHA256SUMS.txt)
 cat "$PARTS"/magic-earth-base.apk.part-* > "$OUT.tmp"
