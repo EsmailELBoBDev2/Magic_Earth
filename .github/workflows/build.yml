@@ -36,11 +36,17 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 65
     steps:
-      - name: Refuse non-private repository execution
-        if: ${{ github.event.repository.private != true }}
+      - name: Verify repository is private (API source of truth)
+        shell: bash
         run: |
-          echo 'ERROR: this workflow contains a private drive-test signing key and upstream APK handling. Repository must remain private.' >&2
-          exit 90
+          set -euo pipefail
+          META="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '[.private,.visibility]|@tsv')"
+          IFS=$'\t' read -r IS_PRIVATE VISIBILITY <<<"$META"
+          echo "repository=$GITHUB_REPOSITORY private=$IS_PRIVATE visibility=$VISIBILITY"
+          if [[ "$IS_PRIVATE" != "true" || "$VISIBILITY" != "private" ]]; then
+            echo 'ERROR: this workflow contains private drive-test signing material and upstream APK handling. Repository must remain private.' >&2
+            exit 90
+          fi
 
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -230,6 +236,18 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 100
     steps:
+      - name: Verify repository is private (API source of truth)
+        shell: bash
+        run: |
+          set -euo pipefail
+          META="$(gh api "repos/${GITHUB_REPOSITORY}" --jq '[.private,.visibility]|@tsv')"
+          IFS=$'\t' read -r IS_PRIVATE VISIBILITY <<<"$META"
+          echo "repository=$GITHUB_REPOSITORY private=$IS_PRIVATE visibility=$VISIBILITY"
+          if [[ "$IS_PRIVATE" != "true" || "$VISIBILITY" != "private" ]]; then
+            echo 'ERROR: refusing forensic materialization because repository is not private.' >&2
+            exit 90
+          fi
+
       - name: Checkout exact failed/current commit
         uses: actions/checkout@v7
 

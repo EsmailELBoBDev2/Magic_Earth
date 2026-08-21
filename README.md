@@ -51,3 +51,14 @@ Drop one whole new APK into `DROP_NEW_APK_HERE/` and run `./SMART_UPDATE.sh`. Th
 - CI refuses to run if the repository is no longer private;
 - npm explicitly records the reviewed Frida install script version, caches only the npm download store, and automatically switches to `npm ci` if a lockfile is later committed;
 - the local log mirror uses a bounded queue so a log storm cannot grow an unbounded in-memory backlog.
+
+## v22.3 smart-update clarification (2026-08-21)
+
+For future upstream APKs, do **not** commit the APK to Git. Put one whole `.apk` in
+`DROP_NEW_APK_HERE/` and run `./SMART_UPDATE.sh`, or pass its path directly.
+The script only performs lightweight local intake/upload/orchestration; all heavy compatibility,
+patching, signing, and automatic Apktool/JADX/Blutter/native forensics run in GitHub Actions.
+
+The workflow verifies repository privacy from the GitHub REST API at runtime rather than relying
+on the event-payload expression. A non-private repository fails closed before upstream APK
+materialization.

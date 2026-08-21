@@ -2,6 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"; cd "$ROOT"
 INBOX="${CAIRODRIVE_APK_INBOX:-$ROOT/DROP_NEW_APK_HERE}"
+mkdir -p "$INBOX"
 
 usage(){ cat <<TXT
 Usage:
@@ -27,5 +28,17 @@ else
   fi
 fi
 APK="$(realpath "$APK")"
-echo "Selected upstream APK: $APK"
+cat <<TXT
+Selected upstream APK: $APK
+
+SMART_UPDATE responsibilities:
+  LOCAL  : validate APK container + manifest, hash it, verify private repo,
+           upload the WHOLE APK to the private upstream-apks Release,
+           commit/push only the tiny SHA-pinned selector.
+  GITHUB : materialize exact APK -> compatibility/delta/GEM checks -> patch/build/sign.
+           If any safe-compatibility/build stage fails, automatic deep forensics runs
+           and publishes the FUTURE-APK-HANDOFF artifact.
+
+No heavy JADX/Apktool/Blutter reverse-engineering is performed locally by SMART_UPDATE.
+TXT
 exec "$ROOT/UPDATE_APK.sh" --watch "$APK"

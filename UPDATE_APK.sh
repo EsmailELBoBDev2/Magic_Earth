@@ -39,9 +39,17 @@ command -v git >/dev/null || { echo 'ERROR: git missing' >&2; exit 2; }
 command -v sha256sum >/dev/null || { echo 'ERROR: sha256sum missing' >&2; exit 2; }
 command -v unzip >/dev/null || { echo 'ERROR: unzip missing' >&2; exit 2; }
 git rev-parse --is-inside-work-tree >/dev/null
+BRANCH="$(git branch --show-current)"
+[[ "$BRANCH" == "main" ]] || { echo "ERROR: SMART update must run from main; current branch=$BRANCH" >&2; exit 3; }
 [[ -z "$(git status --porcelain --untracked-files=no)" ]] || {
   echo 'ERROR: tracked working-tree changes exist. Commit/stash them before importing a new upstream APK.' >&2
   git status --short >&2
+  exit 3
+}
+# Start from the exact remote main so the selector commit never races/stomps newer CI fixes.
+git fetch origin main --quiet
+git merge --ff-only origin/main >/dev/null || {
+  echo 'ERROR: local main has diverged from origin/main; resolve that before importing a new APK.' >&2
   exit 3
 }
 unzip -tq "$APK" >/dev/null || { echo 'ERROR: input is not a valid APK/ZIP' >&2; exit 4; }
