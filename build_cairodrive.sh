@@ -47,7 +47,19 @@ TMPKS="$WORK/intermediate.keystore"
 # Rewrite only manifest package identity; preserve original component class namespace.
 apktool d -f -s -o "$WORK/decoded" "$WORK/patched-oldpkg.apk" >/dev/null
 VERSION_NAME_SUFFIX="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"
-python3 "$ROOT/tools/rewrite_manifest.py" "$WORK/decoded/AndroidManifest.xml" --old-package com.generalmagic.magicearth --new-package "$TARGET_PACKAGE" --label "$APP_LABEL" "--version-name-suffix=$VERSION_NAME_SUFFIX"
+SOURCE_VERSION_CODE="$($AAPT2 dump badging "$APK" | sed -n "s/^package:.*versionCode='\([0-9][0-9]*\)'.*/\1/p" | head -1)"
+[[ "$SOURCE_VERSION_CODE" =~ ^[0-9]+$ ]] || { echo "ERROR: could not read source versionCode" >&2; exit 1; }
+if [[ -n "${CAIRODRIVE_PLAY_VERSION_CODE:-}" ]]; then
+  PLAY_VERSION_CODE="$CAIRODRIVE_PLAY_VERSION_CODE"
+else
+  PLAY_VERSION_OFFSET="${GITHUB_RUN_NUMBER:-1}"
+  [[ "$PLAY_VERSION_OFFSET" =~ ^[0-9]+$ && "$PLAY_VERSION_OFFSET" -gt 0 ]] || { echo "ERROR: invalid Play versionCode offset: $PLAY_VERSION_OFFSET" >&2; exit 1; }
+  PLAY_VERSION_CODE=$((10#$SOURCE_VERSION_CODE + 10#$PLAY_VERSION_OFFSET))
+fi
+[[ "$PLAY_VERSION_CODE" =~ ^[0-9]+$ ]] || { echo "ERROR: invalid Play versionCode: $PLAY_VERSION_CODE" >&2; exit 1; }
+(( PLAY_VERSION_CODE > SOURCE_VERSION_CODE && PLAY_VERSION_CODE <= 2100000000 )) || { echo "ERROR: Play versionCode must be > source and <=2100000000: source=$SOURCE_VERSION_CODE play=$PLAY_VERSION_CODE" >&2; exit 1; }
+echo "Play versionCode: source=$SOURCE_VERSION_CODE output=$PLAY_VERSION_CODE runOffset=${GITHUB_RUN_NUMBER:-local}"
+python3 "$ROOT/tools/rewrite_manifest.py" "$WORK/decoded/AndroidManifest.xml" --old-package com.generalmagic.magicearth --new-package "$TARGET_PACKAGE" --label "$APP_LABEL" --version-code "$PLAY_VERSION_CODE" "--version-name-suffix=$VERSION_NAME_SUFFIX"
 python3 - "$WORK/decoded/apktool.yml" <<'PY'
 import sys,re
 p=sys.argv[1]; s=open(p,encoding='utf-8').read(); s=re.sub(r'(?m)^renameManifestPackage:.*\n','',s); open(p,'w',encoding='utf-8').write(s)
@@ -59,6 +71,8 @@ apksigner sign --ks "$KS" --ks-pass "pass:$STOREPASS" --key-pass "pass:$KEYPASS"
 apksigner verify --verbose --print-certs "$FINAL_APK" >/dev/null
 PKG="$($AAPT2 dump badging "$FINAL_APK" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
 [[ "$PKG" == "$TARGET_PACKAGE" ]] || { echo "ERROR: final package=$PKG expected=$TARGET_PACKAGE" >&2; exit 1; }
+FINAL_VERSION_CODE="$($AAPT2 dump badging "$FINAL_APK" | sed -n "s/^package:.*versionCode='\([0-9][0-9]*\)'.*/\1/p" | head -1)"
+[[ "$FINAL_VERSION_CODE" == "$PLAY_VERSION_CODE" ]] || { echo "ERROR: final APK versionCode=$FINAL_VERSION_CODE expected=$PLAY_VERSION_CODE" >&2; exit 1; }
 python3 "$ROOT/tools/compare_resource_ids.py" "$AAPT2" "$WORK/patched-oldpkg.apk" "$FINAL_APK" >/dev/null
 
 CERT_SHA1="$(keytool -list -v -keystore "$KS" -storepass "$STOREPASS" -alias "$ALIAS" 2>/dev/null | sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | head -1)"
@@ -69,10 +83,14 @@ BUNDLETOOL_JAR="${BUNDLETOOL_JAR:-}" "$ROOT/tools/build_aab.sh" "$WORK/CairoDriv
 UNIVERSAL="${FINAL_AAB%.aab}-universal.apk"
 UPKG="$($AAPT2 dump badging "$UNIVERSAL" | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
 [[ "$UPKG" == "$TARGET_PACKAGE" ]] || { echo "ERROR: AAB universal package=$UPKG expected=$TARGET_PACKAGE" >&2; exit 1; }
+UNIVERSAL_VERSION_CODE="$($AAPT2 dump badging "$UNIVERSAL" | sed -n "s/^package:.*versionCode='\([0-9][0-9]*\)'.*/\1/p" | head -1)"
+[[ "$UNIVERSAL_VERSION_CODE" == "$PLAY_VERSION_CODE" ]] || { echo "ERROR: AAB universal versionCode=$UNIVERSAL_VERSION_CODE expected=$PLAY_VERSION_CODE" >&2; exit 1; }
 
 cat > "$OUTDIR/BUILD_REPORT.txt" <<EOF
 CairoDrive v${PATCH_VERSION_SAFE} Places + Traffic Advisory + Drive Assist
 source_sha256=$(sha256sum "$APK"|awk '{print $1}')
+source_version_code=$SOURCE_VERSION_CODE
+play_version_code=$PLAY_VERSION_CODE
 target_package=$TARGET_PACKAGE
 apk_sha256=$(sha256sum "$FINAL_APK"|awk '{print $1}')
 aab_sha256=$(sha256sum "$FINAL_AAB"|awk '{print $1}')

@@ -114,4 +114,24 @@ grep -Fq 'EXPECTED_UPLOAD_CERT_SHA1: D9:19:59:58:60:C9:47:E3:FC:A6:5A:16:EF:FB:B
 ! grep -Fq 'CAIRODRIVE_KEYSTORE_B64_FILE: ${{ github.workspace }}/ci/signing/drive-test.keystore.b64' .github/workflows/build.yml
 ! grep -Fq 'ANDROID_KEYSTORE_PASSWORD: cairodrive-drive-test-2026' .github/workflows/build.yml
 grep -Fq 'Play signing fingerprint guard: PASS' build_cairodrive.sh
-echo 'VERIFY_REPO: PASS — Git-visible files are GitHub-safe; portable/fail-closed repo invariants and Play-key secret signing and fail-closed fingerprint checks pass.'
+
+# Runtime JNI crash regression guards: only the stock app's captured real
+# NavigationService + NavigationListener may be used for native navigation state.
+! grep -Fq '__navServiceKeepAlive = Java.retain(NS.$new())' payload/cairodrive-google-search-only.js
+! grep -Fq 'isNavigationActive(null)' payload/cairodrive-google-search-only.js
+! grep -Fq 'service.isNavigationActive()' payload/cairodrive-google-search-only.js
+! grep -Fq 'isSimulationActive(null)' payload/cairodrive-google-search-only.js
+! grep -Fq 'service.isSimulationActive()' payload/cairodrive-google-search-only.js
+! grep -Fq 'getNavigationRoute(null)' payload/cairodrive-google-search-only.js
+! grep -Fq 'getNavigationRoute()' payload/cairodrive-google-search-only.js
+! grep -Fq 'getNavigationInstruction(null)' payload/cairodrive-google-search-only.js
+! grep -Fq 'getNavigationInstruction()' payload/cairodrive-google-search-only.js
+grep -Fq 'NAV_SERVICE_WAITING_FOR_REAL_SESSION source=startNavigation-hook failClosed=yes' payload/cairodrive-google-search-only.js
+grep -Fq 'wakeNavigationAssist(20);' payload/cairodrive-google-search-only.js
+
+# Play releases must never reuse the upstream versionCode for a CairoDrive rebuild.
+grep -Fq 'SOURCE_VERSION_CODE=' build_cairodrive.sh
+grep -Fq 'PLAY_VERSION_OFFSET="${GITHUB_RUN_NUMBER:-1}"' build_cairodrive.sh
+grep -Fq -- '--version-code "$PLAY_VERSION_CODE"' build_cairodrive.sh
+grep -Fq 'play_version_code=$PLAY_VERSION_CODE' build_cairodrive.sh
+echo 'VERIFY_REPO: PASS — Git-visible files are GitHub-safe; runtime JNI session safety, monotonic Play versionCode, portable/fail-closed patching, and Play-key signing checks pass.'

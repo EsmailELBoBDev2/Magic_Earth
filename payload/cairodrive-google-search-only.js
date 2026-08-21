@@ -780,13 +780,14 @@ function deliverAutocomplete(query,listId,listenerId,generation,bias,originalRaw
 }
 
 function activeRouteSearchContext() {
-  if(!Java.available||!__navServiceKeepAlive)return null;
+  if(!Java.available)return null;
+  const cap=__capturedNavigation;
+  if(!cap||!cap.service||!cap.listener)return null;
   let ctx=null;
   try{
     Java.perform(()=>{
-      const active=routeServiceActive(__navServiceKeepAlive);
-      if(!active)return;
-      let route=null;try{route=__navServiceKeepAlive.getNavigationRoute(null);}catch(_){try{route=__navServiceKeepAlive.getNavigationRoute();}catch(__){}}
+      if(!routeServiceActive(cap.service,cap.listener))return;
+      let route=null;try{route=cap.service.getNavigationRoute(cap.listener);}catch(e){log(`SEARCH_ALONG_ROUTE_NATIVE_ROUTE_ERROR ${String(e)}`);return;}
       const snap=collectTrafficRouteSnapshot(route);if(!snap||snap.remain<1000)return;
       const pts=[snap.origin,...snap.samples.map(x=>({latitude:x.latitude,longitude:x.longitude})),snap.destination];
       const encoded=encodeGooglePolyline(pts);
@@ -926,20 +927,17 @@ let __lastBenchmarkControlPollAt=0;
 let __navEnumsReady = false;
 
 function routeServiceActive(service, listener=null) {
-  if(!service)return false;
-  try{if(listener&&typeof service.isNavigationActive==='function'&&service.isNavigationActive(listener))return true;}catch(_){}
-  try{if(typeof service.isNavigationActive==='function'&&service.isNavigationActive(null))return true;}catch(_){}
-  try{if(typeof service.isNavigationActive==='function'&&service.isNavigationActive())return true;}catch(_){}
-  try{if(listener&&typeof service.isSimulationActive==='function'&&service.isSimulationActive(listener))return true;}catch(_){}
-  try{if(typeof service.isSimulationActive==='function'&&service.isSimulationActive(null))return true;}catch(_){}
-  try{if(typeof service.isSimulationActive==='function'&&service.isSimulationActive())return true;}catch(_){}
+  // MagicLane's JNI wrappers require the REAL NavigationService instance and
+  // its real NavigationListener. Listener-less probes or calling it
+  // on NavigationService.$new() can dereference a null native session in libGEM.
+  if(!service||!listener)return false;
+  try{if(typeof service.isNavigationActive==='function'&&service.isNavigationActive(listener))return true;}catch(e){log(`NAV_ACTIVE_PROBE_ERROR ${String(e)}`);return false;}
+  try{if(typeof service.isSimulationActive==='function')return !!service.isSimulationActive(listener);}catch(e){log(`SIM_ACTIVE_PROBE_ERROR ${String(e)}`);}
   return false;
 }
 function routeServiceSimulationActive(service, listener=null) {
-  if(!service)return false;
-  try{if(listener&&typeof service.isSimulationActive==='function')return !!service.isSimulationActive(listener);}catch(_){}
-  try{if(typeof service.isSimulationActive==='function')return !!service.isSimulationActive(null);}catch(_){}
-  try{if(typeof service.isSimulationActive==='function')return !!service.isSimulationActive();}catch(_){}
+  if(!service||!listener)return false;
+  try{if(typeof service.isSimulationActive==='function')return !!service.isSimulationActive(listener);}catch(e){log(`SIM_ACTIVE_PROBE_ERROR ${String(e)}`);}
   return false;
 }
 let __trafficObjectKeepAlive = null;
@@ -1025,8 +1023,10 @@ function consumeDriveControlActions() {
 
 function repeatCurrentVoiceInstruction() {
   try {
-    if (!__navServiceKeepAlive) { log('VOICE_REPEAT_SKIPPED reason=no-navigation-service'); toastMessage('No navigation instruction to repeat'); return; }
-    let ni=null; try{ni=__navServiceKeepAlive.getNavigationInstruction(null);}catch(_){try{ni=__navServiceKeepAlive.getNavigationInstruction();}catch(__){}}
+    const cap=__capturedNavigation;
+    if(!cap||!cap.service||!cap.listener){log('VOICE_REPEAT_SKIPPED reason=no-captured-navigation-session');toastMessage('No navigation instruction to repeat');return;}
+    let ni=null;
+    try{ni=cap.service.getNavigationInstruction(cap.listener);}catch(e){log(`VOICE_REPEAT_SKIPPED reason=native-instruction-unavailable ${String(e)}`);}
     if(!ni){log('VOICE_REPEAT_SKIPPED reason=no-instruction');toastMessage('No navigation instruction to repeat');return;}
     let text=''; try{text=String(ni.getNextTurnInstruction()||'').trim();}catch(_){}
     if(!text){log('VOICE_REPEAT_SKIPPED reason=no-text');toastMessage('No voice instruction available');return;}
@@ -1406,7 +1406,12 @@ function collectTrafficRouteSnapshot(route){
   }catch(e){log(`GOOGLE_TRAFFIC_SNAPSHOT_ERROR ${String(e)}`);return null;}
 }
 function classifyRoutesFailure(status,body){const f=classifyGoogleFailure(status,body);if(status===429)return {...f,cooldownMs:300000};if(status>=500)return {...f,cooldownMs:60000};return f;}
-function navigationStillActive(){let active=false;if(!Java.available||!__navServiceKeepAlive)return false;try{Java.perform(()=>{active=routeServiceActive(__navServiceKeepAlive);});}catch(_){}return active;}
+function navigationStillActive(){
+  let active=false;if(!Java.available)return false;
+  const cap=__capturedNavigation;if(!cap||!cap.service||!cap.listener)return false;
+  try{Java.perform(()=>{active=routeServiceActive(cap.service,cap.listener);});}catch(_){}
+  return active;
+}
 async function requestGoogleTrafficAdvice(snapshot,seq,initial=false){
   if(!androidNetworkAvailable()){__trafficAdviceInFlight=false;log('GOOGLE_TRAFFIC_FALLBACK reason=offline');return;}
   migratePrivateState();if(!GOOGLE_ROUTES_API_KEY)GOOGLE_ROUTES_API_KEY=GOOGLE_PLACES_API_KEY;
@@ -1512,18 +1517,20 @@ function noteRouteRecomputeTrigger(reason){
 }
 
 function invokeNavigationRoadBlock(lengthM,startDistanceM,reason='narrow'){
-  if(!__navServiceKeepAlive)return false;
+  const cap=__capturedNavigation;
+  if(!cap||!cap.service||!cap.listener)return false;
+  const service=cap.service;
   const length=Math.max(30,Math.min(1500,Math.round(Number(lengthM)||0)));
   const start=Math.max(0,Math.round(Number(startDistanceM)||0));
   try{
-    const f=__navServiceKeepAlive.setNavigationRoadBlock;
+    const f=service.setNavigationRoadBlock;
     const ovs=f&&f.overloads?f.overloads:[];
     for(const ov of ovs){
       const types=(ov.argumentTypes||[]).map(x=>String(x.className||x.name||x));
       try{
         if(types.length>=2 && /int/.test(types[0]) && /int/.test(types[1])){
           const args=[length,start]; while(args.length<types.length)args.push(null);
-          ov.call(__navServiceKeepAlive,...args);
+          ov.call(service,...args);
           noteRouteRecomputeTrigger(reason);log(`NAV_ROADBLOCK_APPLIED reason=${reason} lengthM=${length} startAheadM=${start} signature=${types.join(',')}`);return true;
         }
       }catch(_){}
@@ -1972,7 +1979,7 @@ function scheduleBetterRouteAutoSwitch(route,travelTime,delay,timeGain,listenerO
     if(listener&&objectNativeKey(cap.listener)!==objectNativeKey(listener)){log('BETTER_ROUTE_KEEP reason=listener-mismatch');return;}
     const active=routeServiceActive(cap.service,cap.listener);
     if(!active){log('BETTER_ROUTE_KEEP reason=navigation-inactive');return;}
-    let current=null;try{current=cap.service.getNavigationRoute(cap.listener);}catch(_){try{current=cap.service.getNavigationRoute();}catch(__){}}
+    let current=null;try{current=cap.service.getNavigationRoute(cap.listener);}catch(e){log(`BETTER_ROUTE_KEEP reason=current-route-unavailable error=${String(e)}`);return;}
     if(current&&objectNativeKey(current)===objectNativeKey(proposed)){log('BETTER_ROUTE_ALREADY_APPLIED source=stock-app');return;}
     const previous=current?Java.retain(current):null;
     if(!cancelCapturedNavigation(cap)){log('BETTER_ROUTE_SWITCH_FAILED reason=cancel-unavailable');return;}
@@ -2027,6 +2034,7 @@ function captureNavigationSession(service,args){
     // and recompute timing instead of relying on a separately-constructed wrapper.
     try{__navServiceKeepAlive=Java.retain(service);}catch(_){}
     installConcreteBetterRouteHook(listener);
+    wakeNavigationAssist(20);
     log(`NAV_SESSION_CAPTURED listener=${String(listener.$className||'unknown')} progress=${progress?'yes':'no'} positionSource=${positionSource?'yes':'no'}`);
   }catch(e){log(`NAV_SESSION_CAPTURE_ERROR ${String(e)}`);}
 }
@@ -2093,11 +2101,9 @@ function invokeSimulationEquivalent(service,fromMethod,originalOverload,args){
   return {handled:true,result:blockedJavaReturn(originalOverload)};
 }
 function currentCapturedRoute(){
-  const cap=__capturedNavigation;const service=(cap&&cap.service)||__navServiceKeepAlive;if(!service)return null;
-  try{if(cap&&cap.listener)return service.getNavigationRoute(cap.listener);}catch(_){}
-  try{return service.getNavigationRoute(null);}catch(_){}
-  try{return service.getNavigationRoute();}catch(_){}
-  return null;
+  const cap=__capturedNavigation;
+  if(!cap||!cap.service||!cap.listener)return null;
+  try{return cap.service.getNavigationRoute(cap.listener);}catch(e){log(`CURRENT_ROUTE_NATIVE_ERROR ${String(e)}`);return null;}
 }
 function routeBenchMetrics(route){
   if(!route)return null;
@@ -2132,7 +2138,7 @@ function consumeBenchmarkRoadblockControl(route){
   __benchmarkPending={token,algorithm:ROUTE_ALGO_EXPERIMENT_MODE==='externalch-reroute'||ROUTE_ALGO_EXPERIMENT_MODE==='externalch-all'?'ExternalCh':'MagicEarth',startedAt:now,startAheadM,lengthM};
   logBenchmarkRouteResult(route,'before','benchmark-control');
   const ok=invokeNavigationRoadBlock(lengthM,startAheadM,`benchmark:${token}`);
-  log(`ROUTE_BENCH_TRIGGER token=${token} algorithm=${__benchmarkPending.algorithm} startAheadM=${startAheadM} lengthM=${lengthM} applied=${ok?'yes':'no'} simulation=${routeServiceSimulationActive((__capturedNavigation&&__capturedNavigation.service)||__navServiceKeepAlive,(__capturedNavigation&&__capturedNavigation.listener)||null)?'yes':'no'}`);
+  log(`ROUTE_BENCH_TRIGGER token=${token} algorithm=${__benchmarkPending.algorithm} startAheadM=${startAheadM} lengthM=${lengthM} applied=${ok?'yes':'no'} simulation=${routeServiceSimulationActive(__capturedNavigation&&__capturedNavigation.service,__capturedNavigation&&__capturedNavigation.listener)?'yes':'no'}`);
   if(!ok)__benchmarkPending=null;
 }
 function installBetterRouteAutoSwitchHooks(){
@@ -2161,14 +2167,13 @@ function startNativeLaneAssist() {
   installBetterRouteAutoSwitchHooks();
   try {
     Java.perform(() => {
-      const NS = Java.use('com.magiclane.sdk.routesandnavigation.NavigationService');
-      __navServiceKeepAlive = Java.retain(NS.$new());
       if (!__navBannerClass) __navBannerClass = Java.use('com.cairodrive.nav.NavBanner');
       __laneColors = {
         background: makeRgba(32,32,32,255),
         active: makeRgba(255,193,7,255),
         inactive: makeRgba(135,135,135,255)
       };
+      log('NAV_SERVICE_WAITING_FOR_REAL_SESSION source=startNavigation-hook failClosed=yes');
       log('LANE_ASSIST_READY source=MagicLane-NavigationInstruction scheduler=event-wake+adaptive-1s-active-3s-idle overlay=compact-supplemental stock-nav-ui=authoritative speedLimit=current+upcoming+native-alarm trafficEvents=yes routeWarnings=toll+ferry+restricted liveRestrictions=yes navStatus=return-to-route+gps+reroute roadShield=yes etaRttRtd=yes roundaboutExit=yes nextWaypointEtaSide=yes betterRouteAutoSwitch=hooked-if-exposed controls=report+media-pause+repeat trace=always-on-local');
     });
   } catch (e) { log(`LANE_ASSIST_INIT_ERROR ${String(e)}`); return; }
@@ -2176,20 +2181,26 @@ function startNativeLaneAssist() {
   const tick=()=>{
     __navTickRunning=true;
     let nextMs=3000;
-    if (!Java.available || !__navServiceKeepAlive || !__navBannerClass){__navTickRunning=false;__navPollTimer=setTimeout(tick,nextMs);return;}
+    if (!Java.available || !__navBannerClass){__navTickRunning=false;__navPollTimer=setTimeout(tick,nextMs);return;}
     try {
       Java.perform(() => {
-        const active=routeServiceActive(__navServiceKeepAlive);
         consumeDriveControlActions();
+        const cap=__capturedNavigation;
+        if(!cap||!cap.service||!cap.listener){
+          traceLocationAndSystem(null,false);
+          if(__lastNavBannerKey){try{__navBannerClass.hide();}catch(_){}__lastNavBannerKey='';log('LANE_ASSIST_HIDE reason=no-real-navigation-session');}
+          return;
+        }
+        const active=routeServiceActive(cap.service,cap.listener);
         if(!active){
           traceLocationAndSystem(null,false);
           if(__lastNavBannerKey){try{__navBannerClass.hide();}catch(_){}__lastNavBannerKey='';log('LANE_ASSIST_HIDE reason=inactive');}
           return;
         }
         nextMs=1000;
-        let ni=null;try{ni=__navServiceKeepAlive.getNavigationInstruction(null);}catch(_){try{ni=__navServiceKeepAlive.getNavigationInstruction();}catch(__){}}
+        let ni=null;try{ni=cap.service.getNavigationInstruction(cap.listener);}catch(e){log(`NAV_INSTRUCTION_NATIVE_ERROR ${String(e)}`);}
         traceLocationAndSystem(ni,true);
-        let route=null;try{route=__navServiceKeepAlive.getNavigationRoute(null);}catch(_){try{route=__navServiceKeepAlive.getNavigationRoute();}catch(__){}}
+        let route=null;try{route=cap.service.getNavigationRoute(cap.listener);}catch(e){log(`NAV_ROUTE_NATIVE_ERROR ${String(e)}`);}
         if(route)consumeBenchmarkRoadblockControl(route);
         analyzeUpcomingComfortRoute(route);
         maybeScheduleGoogleTraffic(route);
