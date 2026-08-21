@@ -1,13 +1,5 @@
-# PRIVATE REPOSITORY REQUIRED
+# Repository visibility
 
-This repository bundle contains:
-- chunks of the user-supplied Magic Earth APK for reproducible private CI builds;
-- a drive-test signing key whose password is intentionally included for reproducibility.
+A private repository is **not required** for GitHub Actions artifacts. The workflow supports both public and private repositories.
 
-Do **not** publish this repository. Before pushing, make `EsmailELBoBDev2/Magic_Earth` private.
-
-```bash
-gh repo edit EsmailELBoBDev2/Magic_Earth --visibility private --accept-visibility-change-consequences
-```
-
-The included signing key is for private drive testing only, not Google Play/production distribution.
+If this repository is public, treat all committed material and GitHub Release assets as public, including the base-APK chunks and the bundled drive-test signing key. The signing key is for drive-test builds only and should not be treated as a production trust anchor.

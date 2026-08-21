@@ -32,8 +32,8 @@ cat <<TXT
 Selected upstream APK: $APK
 
 SMART_UPDATE responsibilities:
-  LOCAL  : validate APK container + manifest, hash it, verify private repo,
-           upload the WHOLE APK to the private upstream-apks Release,
+  LOCAL  : validate APK container + manifest, hash it,
+           upload the WHOLE APK to the upstream-apks GitHub Release,
            commit/push only the tiny SHA-pinned selector.
   GITHUB : materialize exact APK -> compatibility/delta/GEM checks -> patch/build/sign.
            If any safe-compatibility/build stage fails, automatic deep forensics runs

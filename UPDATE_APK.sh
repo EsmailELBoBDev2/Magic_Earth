@@ -14,7 +14,7 @@ Usage:
   ./UPDATE_APK.sh --no-push /path/to/new-MagicEarth.apk
   ./UPDATE_APK.sh --legacy-chunks /path/to/new-MagicEarth.apk
 
-Default/recommended: upload the whole APK to the private GitHub release, commit only a tiny
+Default/recommended: upload the whole APK to the GitHub release, commit only a tiny
 SHA-pinned manifest, push main, and let CI patch it. --legacy-chunks keeps the old 24 MiB mode.
 TXT
 }
@@ -71,14 +71,12 @@ if [[ "$MODE" == chunks ]]; then
 else
   command -v gh >/dev/null || { echo 'ERROR: gh CLI missing. On Arch: sudo pacman -S github-cli' >&2; exit 5; }
   gh auth status >/dev/null
-  VIS="$(gh repo view "$REPO" --json visibility -q .visibility)"
-  [[ "$VIS" == PRIVATE ]] || { echo "ERROR: $REPO must remain PRIVATE; current visibility=$VIS" >&2; exit 5; }
   ASSET="MagicEarth-${SHA:0:16}.apk"
   echo "Whole-APK release import: $ORIGINAL -> $RELEASE_TAG/$ASSET"
   if ! gh release view "$RELEASE_TAG" --repo "$REPO" >/dev/null 2>&1; then
     gh release create "$RELEASE_TAG" --repo "$REPO" --target main \
-      --title 'Private upstream Magic Earth APK inputs' \
-      --notes 'Private CI input assets. Each APK is SHA-pinned by base_apk_release.json.'
+      --title 'Upstream Magic Earth APK inputs' \
+      --notes 'CI input assets. Each APK is SHA-pinned by base_apk_release.json.'
   fi
   if gh release view "$RELEASE_TAG" --repo "$REPO" --json assets -q '.assets[].name' | grep -Fxq "$ASSET"; then
     echo "Release asset already exists: $ASSET"
@@ -92,7 +90,7 @@ import datetime,json,sys
 orig,sha,size,tag,asset,version=sys.argv[1:]
 print(json.dumps({
   "schema":1,
-  "source":"private_github_release",
+  "source":"github_release",
   "release_tag":tag,
   "asset_name":asset,
   "original_name":orig,

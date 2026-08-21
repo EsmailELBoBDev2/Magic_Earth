@@ -7,10 +7,10 @@ mkdir -p "$(dirname "$OUT")"
 
 sha_file(){ sha256sum "$1" | awk '{print $1}'; }
 
-# Preferred future-input path: immutable-by-name APK asset on a private GitHub release.
+# Preferred future-input path: immutable-by-name APK asset on a GitHub release.
 if [[ -f "$ROOT/base_apk_release.json" ]]; then
   command -v python3 >/dev/null || { echo 'ERROR: python3 missing' >&2; exit 1; }
-  command -v gh >/dev/null || { echo 'ERROR: gh CLI missing; required for private release APK input' >&2; exit 1; }
+  command -v gh >/dev/null || { echo 'ERROR: gh CLI missing; required for GitHub release APK input' >&2; exit 1; }
   readarray -t META < <(python3 - "$ROOT/base_apk_release.json" <<'PY'
 import json,sys
 j=json.load(open(sys.argv[1],encoding='utf-8'))
@@ -32,7 +32,7 @@ PY
   }
   export GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}"
   TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
-  echo "Downloading private release input: $REPO release=$TAG asset=$ASSET"
+  echo "Downloading release input: $REPO release=$TAG asset=$ASSET"
   gh release download "$TAG" --repo "$REPO" --pattern "$ASSET" --dir "$TMP"
   [[ -f "$TMP/$ASSET" ]] || { echo "ERROR: release asset not downloaded: $ASSET" >&2; exit 1; }
   ACTUAL="$(sha_file "$TMP/$ASSET")"

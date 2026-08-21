@@ -1,4 +1,4 @@
-# CairoDrive v22.3 — private drive-test CI
+# CairoDrive v22.3 — drive-test CI
 
 Target application ID: `com.cairodrive.app`.
 
@@ -17,9 +17,10 @@ v22.3 is future-ready rather than tied to one SHA:
 
 See `FUTURE_COMPATIBILITY.md`.
 
-## One-time private repo requirement
+## Repository visibility
 
-This bundle contains the user-supplied base APK as 24 MiB chunks and a reproducible **drive-test-only** signing key. The GitHub repo must be private before pushing.
+CI supports either public or private repositories. GitHub Actions artifacts upload in both modes.
+If this repository is public, the committed base-APK chunks, workflow files, and bundled drive-test signing material are also public; future APKs uploaded to the `upstream-apks` Release are public release assets too.
 
 ## CI output
 
@@ -37,7 +38,7 @@ Google API credentials are **not embedded** in Git or build artifacts. They are 
 
 ## Updating to a future Magic Earth APK
 
-Drop one whole new APK into `DROP_NEW_APK_HERE/` and run `./SMART_UPDATE.sh`. The helper uploads the large APK as a private SHA-pinned GitHub Release asset, commits only its tiny selector, pushes `main`, watches CI, and downloads results. CI compares the new version against `baseline/known-good.json`, attempts the portable patch only when required anchors remain valid, and automatically creates a deep reverse-engineering handoff artifact after any compatibility or build failure. See `FUTURE_APK_AUTOMATION.md`.
+Drop one whole new APK into `DROP_NEW_APK_HERE/` and run `./SMART_UPDATE.sh`. The helper uploads the large APK as a SHA-pinned GitHub Release asset, commits only its tiny selector, pushes `main`, watches CI, and downloads results. CI compares the new version against `baseline/known-good.json`, attempts the portable patch only when required anchors remain valid, and automatically creates a deep reverse-engineering handoff artifact after any compatibility or build failure. See `FUTURE_APK_AUTOMATION.md`.
 
 
 ## CI hardening added after run #10
@@ -48,7 +49,7 @@ Drop one whole new APK into `DROP_NEW_APK_HERE/` and run `./SMART_UPDATE.sh`. Th
 - forensic dependency installation is best-effort, so one upstream tool outage does not suppress the basic diagnostic artifact;
 - APK hashing is streaming and DEX marker scanning is per-file to reduce RAM;
 - a known-good compatibility delta separates expected version drift from required-anchor loss;
-- CI refuses to run if the repository is no longer private;
+- CI no longer enforces repository visibility; public and private repositories are both supported;
 - npm explicitly records the reviewed Frida install script version, caches only the npm download store, and automatically switches to `npm ci` if a lockfile is later committed;
 - the local log mirror uses a bounded queue so a log storm cannot grow an unbounded in-memory backlog.
 
@@ -59,6 +60,5 @@ For future upstream APKs, do **not** commit the APK to Git. Put one whole `.apk`
 The script only performs lightweight local intake/upload/orchestration; all heavy compatibility,
 patching, signing, and automatic Apktool/JADX/Blutter/native forensics run in GitHub Actions.
 
-The workflow verifies repository privacy from the GitHub REST API at runtime rather than relying
-on the event-payload expression. A non-private repository fails closed before upstream APK
-materialization.
+Repository visibility is not a build gate. `SMART_UPDATE.sh` and CI work in public or private repositories.
+When public, remember that Release APK inputs and bundled drive-test signing material are publicly readable.

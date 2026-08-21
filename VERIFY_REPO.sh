@@ -73,8 +73,9 @@ grep -q 'gem_discovery_rc' .github/workflows/build.yml
 grep -q 'CairoDrive-FUTURE-APK-HANDOFF' .github/workflows/build.yml
 grep -q 'actions/download-artifact@v8' .github/workflows/build.yml
 grep -q 'actions/cache@v5' .github/workflows/build.yml
-grep -q 'gh api "repos/${GITHUB_REPOSITORY}"' .github/workflows/build.yml
+! grep -q 'Verify repository is private' .github/workflows/build.yml
 ! grep -q 'github.event.repository.private != true' .github/workflows/build.yml
+! grep -q 'must remain PRIVATE' UPDATE_APK.sh
 grep -q 'git merge --ff-only origin/main' UPDATE_APK.sh
 grep -q 'npm ci --no-audit --no-fund' payload/build_patch.sh
 grep -q 'PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-22.3}"' build_cairodrive.sh
