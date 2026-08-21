@@ -87,6 +87,11 @@ grep -q 'APK="${1:-$ROOT/input/base.apk}"' build_and_update.sh
 grep -q 'BOOT agent=' watch_search.sh
 grep -q 'BOOT agent=' watch_nav.sh
 grep -q 'CAIRODRIVE_PATCH_VERSION:' .github/workflows/build.yml
+# Self-signed Android/AAB signing regression guards.
+! grep -q 'jarsigner -verify -strict' tools/build_aab.sh
+! grep -q 'jarsigner -verify -strict' .github/workflows/build.yml
+grep -q 'AAB signer certificate does not match selected keystore' tools/build_aab.sh
+grep -q 'keytool -printcert -jarfile' tools/build_aab.sh
 python3 - <<'PY'
 import json
 p=json.load(open('payload/package.json'))
