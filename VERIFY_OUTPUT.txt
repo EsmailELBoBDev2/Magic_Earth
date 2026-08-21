@@ -1,9 +1,0 @@
-search-core selftest: PASS
-nav-core selftest: PASS
-traffic-core selftest: PASS
-native-filter selftest: PASS
-warning: [options] source value 8 is obsolete and will be removed in a future release
-warning: [options] target value 8 is obsolete and will be removed in a future release
-warning: [options] To suppress warnings about obsolete options, use -Xlint:-options.
-3 warnings
-v22.3 KISS + fast-reroute static verification: PASS

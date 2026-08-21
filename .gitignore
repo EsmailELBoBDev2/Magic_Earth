@@ -18,3 +18,9 @@ forensics/
 __pycache__/
 *.pyc
 payload/.cairodrive-frida.*/
+runtime-results/
+cairodrive-full-test*.log
+cairodrive-gfx*.txt
+cairodrive-mem*.txt
+cairodrive-cpu*.txt
+VERIFY_OUTPUT.txt
