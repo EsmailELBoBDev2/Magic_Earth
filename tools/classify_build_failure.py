@@ -4,7 +4,8 @@ import argparse, json, re
 from pathlib import Path
 
 RULES = [
-    ("FRIDA_COMPILE_PROJECT_ROOT", [r"Entrypoint must be inside the project root", r"frida-compile"]),
+    ("FRIDA_COMPILE_IMPORT_RESOLUTION", [r"error TS-1: Could not resolve", r"Could not resolve [\"\']\./"]),
+    ("FRIDA_COMPILE_PROJECT_ROOT", [r"Entrypoint must be inside the project root"]),
     ("FRIDA_INSTALL_OR_BINDING", [r"frida_binding", r"npm (?:ERR|error).*frida", r"npm rebuild frida"]),
     ("GEM_GLOBAL_DISCOVERY", [r"could not derive set_dart_port globals", r"discover_gem_globals", r"set_dart_port.*not found"]),
     ("APKTOOL_OR_RESOURCE_REBUILD", [r"apktool", r"brut\.androlib", r"resources\.arsc", r"resource.*(?:error|failed)"]),
@@ -19,7 +20,12 @@ RULES = [
 def read_files(root: Path):
     files=[]
     for p in sorted(root.rglob('*')):
-        if p.is_file() and p.stat().st_size <= 20*1024*1024 and p.suffix.lower() in {'.log','.txt','.json'}:
+        # Classify failure evidence, not tool inventories. Provenance/package-lock files
+        # contain words like apktool, javac and frida-compile even when those tools did
+        # not fail, which previously polluted the category list.
+        if p.name in {'TOOLCHAIN_PROVENANCE.txt','package-lock.json','BUILD_FAILURE_CLASSIFICATION.json'}:
+            continue
+        if p.is_file() and p.stat().st_size <= 20*1024*1024 and p.suffix.lower() in {'.log','.txt'}:
             try: text=p.read_text(errors='replace')
             except Exception: continue
             files.append((p,text))

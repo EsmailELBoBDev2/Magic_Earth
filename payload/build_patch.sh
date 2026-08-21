@@ -5,8 +5,11 @@ GADGET="${2:?}"
 OUTAPK="${3:?}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(mktemp -d)"
-BUNDLE_DIR="$(mktemp -d "$ROOT/.cairodrive-frida.XXXXXX")"
-cleanup(){ rm -rf "$WORK" "$BUNDLE_DIR"; }
+# frida-compile 19.x requires the entrypoint to live inside the npm project root.
+# Keep the generated file directly in payload/ so its existing ./search-core.mjs,
+# ./nav-core.mjs and ./traffic-core.mjs imports stay valid siblings too.
+AGENT="$(mktemp "$ROOT/.cairodrive-agent.XXXXXX.js")"
+cleanup(){ rm -rf "$WORK"; rm -f "$AGENT"; }
 trap cleanup EXIT INT TERM
 need(){ command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing command: $1" >&2; exit 1; }; }
 for c in node npm python3 unzip zip zipalign apksigner keytool javac jar sha256sum readelf; do need "$c"; done
@@ -53,8 +56,7 @@ jar cf "$WORK/cairodrive-helper.jar" -C "$WORK/helper-classes" .
 node "$ROOT/../search_core_selftest.mjs"
 node "$ROOT/../nav_core_selftest.mjs"
 node "$ROOT/../traffic_core_selftest.mjs"
-AGENT_REL="$(basename "$BUNDLE_DIR")/cairodrive-agent.js"
-AGENT="$ROOT/$AGENT_REL"
+AGENT_REL="$(basename "$AGENT")"
 cp "$ROOT/cairodrive-google-search-only.js" "$AGENT"
 python3 - "$AGENT" "$DART_OFF" "$POST_OFF" <<'PY'
 from pathlib import Path
@@ -68,8 +70,26 @@ for forbidden in ('__CAIRODRIVE_BUILD_GOOGLE_KEY__','__CAIRODRIVE_BUILD_GOOGLE_R
     if forbidden in s: raise SystemExit('ERROR: obsolete build-key marker remained')
 p.write_text(s)
 PY
-# frida-compile 19.x enforces that the entrypoint lives under the project root.
-# Keep the generated agent in a temporary subdirectory of payload/ and pass a relative path.
+# Fail early with a precise error if a future agent adds a relative module that is
+# not present beside the generated entrypoint. No module list is hardcoded.
+python3 - "$AGENT" <<'PYIMPORT'
+from pathlib import Path
+import re,sys
+p=Path(sys.argv[1])
+s=p.read_text(errors='replace')
+mods=[]
+for rx in (r"\bfrom\s+['\"](\./[^'\"]+)['\"]", r"\bimport\s+['\"](\./[^'\"]+)['\"]"):
+    mods.extend(re.findall(rx,s))
+missing=[]
+for spec in sorted(set(mods)):
+    q=p.parent/spec[2:]
+    if not q.is_file(): missing.append(f"{spec} -> {q}")
+if missing:
+    raise SystemExit('ERROR: unresolved relative Frida modules before compile: ' + '; '.join(missing))
+print('Frida relative-import precheck: PASS ('+str(len(set(mods)))+' modules)')
+PYIMPORT
+# frida-compile 19.x: entrypoint is inside payload/ (the npm project root) and
+# remains beside its relative core modules, satisfying both constraints.
 ./node_modules/.bin/frida-compile "$AGENT_REL" -o "$WORK/libgadget.script.so" -S -c
 [[ -s "$WORK/libgadget.script.so" ]] || { echo 'ERROR: agent bundle missing' >&2; exit 1; }
 
