@@ -4,7 +4,6 @@ ROOT="$(cd "$(dirname "$0")" && pwd)"; cd "$ROOT"
 command -v git >/dev/null || { echo 'ERROR: git missing' >&2; exit 1; }
 git rev-parse --is-inside-work-tree >/dev/null 2>&1 || { echo 'ERROR: VERIFY_REPO.sh must run inside a Git work tree' >&2; exit 1; }
 [[ -f .github/workflows/build.yml ]]
-[[ -f ci/signing/drive-test.keystore.b64 ]]
 [[ -f base_apk_release.json || -f base_apk_parts/SHA256.txt ]] || { echo 'ERROR: no base APK source configured' >&2; exit 1; }
 
 # GitHub hard file-limit guard: inspect only tracked + non-ignored prospective Git files.
@@ -106,5 +105,13 @@ node search_core_selftest.mjs >/dev/null
 node nav_core_selftest.mjs >/dev/null
 node traffic_core_selftest.mjs >/dev/null
 grep -q 'push:' .github/workflows/build.yml
-! grep -q 'secrets\.' .github/workflows/build.yml
-echo 'VERIFY_REPO: PASS — Git-visible files are GitHub-safe; portable/fail-closed repo invariants and zero-secret CI checks pass.'
+[[ -x ci/validate-signing-key.sh ]]
+grep -Fq 'secrets.CAIRODRIVE_KEYSTORE_BASE64' .github/workflows/build.yml
+grep -Fq 'secrets.ANDROID_KEYSTORE_PASSWORD' .github/workflows/build.yml
+grep -Fq 'secrets.ANDROID_KEY_PASSWORD' .github/workflows/build.yml
+grep -Fq 'secrets.ANDROID_KEY_ALIAS' .github/workflows/build.yml
+grep -Fq 'EXPECTED_UPLOAD_CERT_SHA1: D9:19:59:58:60:C9:47:E3:FC:A6:5A:16:EF:FB:BF:9F:C3:E7:2F:9A' .github/workflows/build.yml
+! grep -Fq 'CAIRODRIVE_KEYSTORE_B64_FILE: ${{ github.workspace }}/ci/signing/drive-test.keystore.b64' .github/workflows/build.yml
+! grep -Fq 'ANDROID_KEYSTORE_PASSWORD: cairodrive-drive-test-2026' .github/workflows/build.yml
+grep -Fq 'Play signing fingerprint guard: PASS' build_cairodrive.sh
+echo 'VERIFY_REPO: PASS — Git-visible files are GitHub-safe; portable/fail-closed repo invariants and Play-key secret signing and fail-closed fingerprint checks pass.'

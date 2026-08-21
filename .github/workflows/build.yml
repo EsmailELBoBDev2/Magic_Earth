@@ -138,6 +138,15 @@ jobs:
           echo 'Compatibility gate refused this upstream APK. Automatic forensics will run next; no patched APK is published.' >&2
           exit 42
 
+      - name: Validate Play upload signing key
+        env:
+          CAIRODRIVE_KEYSTORE_BASE64: ${{ secrets.CAIRODRIVE_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          EXPECTED_UPLOAD_CERT_SHA1: D9:19:59:58:60:C9:47:E3:FC:A6:5A:16:EF:FB:BF:9F:C3:E7:2F:9A
+        run: ./ci/validate-signing-key.sh
+
       - name: Fetch pinned Frida Gadget
         run: ./ci/fetch-frida-gadget.sh "$GITHUB_WORKSPACE/input/frida-gadget-android-arm64.so"
 
@@ -151,12 +160,13 @@ jobs:
         if: always()
         run: ./ci/toolchain-report.sh TOOLCHAIN_PROVENANCE.txt || true
 
-      - name: Build signed drive-test APK + AAB
+      - name: Build Play-signed APK + AAB
         env:
-          CAIRODRIVE_KEYSTORE_B64_FILE: ${{ github.workspace }}/ci/signing/drive-test.keystore.b64
-          ANDROID_KEYSTORE_PASSWORD: cairodrive-drive-test-2026
-          ANDROID_KEY_PASSWORD: cairodrive-drive-test-2026
-          ANDROID_KEY_ALIAS: cairodrive
+          CAIRODRIVE_KEYSTORE_BASE64: ${{ secrets.CAIRODRIVE_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          EXPECTED_UPLOAD_CERT_SHA1: D9:19:59:58:60:C9:47:E3:FC:A6:5A:16:EF:FB:BF:9F:C3:E7:2F:9A
           FRIDA_GADGET: ${{ github.workspace }}/input/frida-gadget-android-arm64.so
           OUTDIR: ${{ github.workspace }}/out
         run: |
@@ -183,7 +193,7 @@ jobs:
       - name: Upload drive-test artifact
         uses: actions/upload-artifact@v7
         with:
-          name: CairoDrive-v${{ env.CAIRODRIVE_PATCH_VERSION }}-${{ steps.compat.outputs.version_slug }}-DRIVE-TEST-${{ github.sha }}
+          name: CairoDrive-v${{ env.CAIRODRIVE_PATCH_VERSION }}-${{ steps.compat.outputs.version_slug }}-PLAY-SIGNED-${{ github.sha }}
           path: dist/*
           if-no-files-found: error
           retention-days: 14

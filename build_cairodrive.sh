@@ -24,13 +24,21 @@ prepare_keystore(){
   if [[ -n "${CAIRODRIVE_KEYSTORE:-}" && -f "${CAIRODRIVE_KEYSTORE}" ]]; then KS="$(realpath "$CAIRODRIVE_KEYSTORE")"; return; fi
   if [[ -n "${CAIRODRIVE_KEYSTORE_BASE64:-}" ]]; then printf '%s' "$CAIRODRIVE_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$WORK/upload.keystore"; KS="$WORK/upload.keystore"; return; fi
   local f="${CAIRODRIVE_KEYSTORE_B64_FILE:-}"
-  [[ -n "$f" ]] || { [[ -f "$ROOT/ci/signing/drive-test.keystore.b64" ]] && f="$ROOT/ci/signing/drive-test.keystore.b64"; }
-  [[ -n "$f" && -f "$f" ]] || { echo 'ERROR: signing keystore missing' >&2; exit 1; }
+  [[ -n "$f" && -f "$f" ]] || { echo 'ERROR: signing keystore missing; provide CAIRODRIVE_KEYSTORE, CAIRODRIVE_KEYSTORE_BASE64, or CAIRODRIVE_KEYSTORE_B64_FILE' >&2; exit 1; }
   tr -d '\r\n ' < "$f" | base64 -d > "$WORK/upload.keystore"; KS="$WORK/upload.keystore"
 }
 prepare_keystore
 STOREPASS="${ANDROID_KEYSTORE_PASSWORD:-cairodrive-drive-test-2026}"; ALIAS="${ANDROID_KEY_ALIAS:-cairodrive}"; KEYPASS="${ANDROID_KEY_PASSWORD:-$STOREPASS}"
 keytool -list -keystore "$KS" -storepass "$STOREPASS" -alias "$ALIAS" >/dev/null
+CERT_SHA1="$(keytool -list -v -keystore "$KS" -storepass "$STOREPASS" -alias "$ALIAS" 2>/dev/null | sed -n 's/^[[:space:]]*SHA1:[[:space:]]*//p' | head -1)"
+if [[ -n "${EXPECTED_UPLOAD_CERT_SHA1:-}" ]]; then
+  norm_sha1(){ printf '%s' "$1" | tr '[:lower:]' '[:upper:]' | tr -d ':[:space:]'; }
+  [[ -n "$CERT_SHA1" && "$(norm_sha1 "$CERT_SHA1")" == "$(norm_sha1 "$EXPECTED_UPLOAD_CERT_SHA1")" ]] || {
+    echo "ERROR: wrong signing key: expected Play SHA1=$EXPECTED_UPLOAD_CERT_SHA1 actual=${CERT_SHA1:-unreadable}" >&2
+    exit 91
+  }
+  echo "Play signing fingerprint guard: PASS ($CERT_SHA1)"
+fi
 
 # Build against the materialized upstream APK first; intermediate signer is irrelevant.
 TMPKS="$WORK/intermediate.keystore"
