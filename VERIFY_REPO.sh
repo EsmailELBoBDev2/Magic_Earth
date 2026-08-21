@@ -50,10 +50,16 @@ grep -q 'CairoDriveBootstrapProvider' tools/rewrite_manifest.py
 grep -q 'discover_gem_globals.py' payload/build_patch.sh
 ! grep -q 'patch_libflutter.py' payload/build_patch.sh
 ! grep -q 'EXPECTED_LIBAPP_SHA256' payload/build_patch.sh
-grep -q 'safe signature count' tools/patch_search_debounce.py
 grep -q 'MAX_RESPONSE_BYTES' payload/helper/com/cairodrive/search/AsyncHttp.java
 grep -q 'endpoint not allowlisted' payload/helper/com/cairodrive/search/AsyncHttp.java
-grep -q 'ArrayBlockingQueue<Runnable>(128)' payload/helper/com/cairodrive/log/CairoLog.java
+# Minimal build: stock Magic Earth internals stay stock. Only bootstrap + bounded
+# background HTTP helper enter the injected DEX.
+! grep -Fq 'patch_search_debounce.py' payload/build_patch.sh
+grep -Fq 'CairoDriveBootstrapProvider.java' payload/build_patch.sh
+grep -Fq 'AsyncHttp.java' payload/build_patch.sh
+! grep -Fq 'AutocompletePanel.java' payload/build_patch.sh
+! grep -Fq 'NavBanner.java' payload/build_patch.sh
+! grep -Fq 'CairoLog.java' payload/build_patch.sh
 
 
 # Smart-update / fail-safe invariants.
@@ -77,8 +83,8 @@ grep -q 'actions/cache@v5' .github/workflows/build.yml
 ! grep -q 'must remain PRIVATE' UPDATE_APK.sh
 grep -q 'git merge --ff-only origin/main' UPDATE_APK.sh
 grep -q 'npm ci --no-audit --no-fund' payload/build_patch.sh
-grep -q 'PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-22.3}"' build_cairodrive.sh
-grep -q 'VERSION_NAME_SUFFIX="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"' build_cairodrive.sh
+grep -q 'PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-23.3}"' build_cairodrive.sh
+grep -q 'VERSION_NAME_SUFFIX="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive233}"' build_cairodrive.sh
 grep -Fq -- '"--version-name-suffix=$VERSION_NAME_SUFFIX"' build_cairodrive.sh
 ! grep -Fq -- '--version-name-suffix "${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"' build_cairodrive.sh
 grep -q 'APK="${1:-$ROOT/input/base.apk}"' build_cairodrive.sh
@@ -102,7 +108,6 @@ for s in ./*.sh ci/*.sh tools/*.sh payload/build_patch.sh experiments/*.sh; do [
 python3 -m py_compile tools/*.py ci/*.py experiments/*.py
 cp payload/cairodrive-google-search-only.js "$TMP/agent.mjs"; node --check "$TMP/agent.mjs"
 node search_core_selftest.mjs >/dev/null
-node nav_core_selftest.mjs >/dev/null
 node traffic_core_selftest.mjs >/dev/null
 grep -q 'push:' .github/workflows/build.yml
 [[ -x ci/validate-signing-key.sh ]]
@@ -115,23 +120,50 @@ grep -Fq 'EXPECTED_UPLOAD_CERT_SHA1: D9:19:59:58:60:C9:47:E3:FC:A6:5A:16:EF:FB:B
 ! grep -Fq 'ANDROID_KEYSTORE_PASSWORD: cairodrive-drive-test-2026' .github/workflows/build.yml
 grep -Fq 'Play signing fingerprint guard: PASS' build_cairodrive.sh
 
-# Runtime JNI crash regression guards: only the stock app's captured real
-# NavigationService + NavigationListener may be used for native navigation state.
-! grep -Fq '__navServiceKeepAlive = Java.retain(NS.$new())' payload/cairodrive-google-search-only.js
+# v23.3 minimal runtime regression guards.
+grep -Fq "VERSION='v23.3-minimal-native-traffic-final'" payload/cairodrive-google-search-only.js
+grep -Fq 'SEARCH_INTERCEPT kind=typed' payload/cairodrive-google-search-only.js
+grep -Fq 'SEARCH_INTERCEPT kind=category' payload/cairodrive-google-search-only.js
+grep -Fq 'MAGICLANE_TRAFFIC_ENABLED mode=online' payload/cairodrive-google-search-only.js
+grep -Fq "nk==='avoidunpavedroads'" payload/cairodrive-google-search-only.js
+grep -Fq "nk==='buildterrainprofile'" payload/cairodrive-google-search-only.js
+grep -Fq 'NARROW_EVIDENCE' payload/cairodrive-google-search-only.js
+grep -Fq 'GOOGLE_TRAFFIC_REQUEST' payload/cairodrive-google-search-only.js
+
+# Near-native traffic renderer: real stock MapView, refresh-driven, merged,
+# adaptively simplified, and snapshot-replaced only when traffic changes.
+grep -Fq 'TRAFFIC_MAP_MAX_PATHS=16' payload/cairodrive-google-search-only.js
+grep -Fq 'TRAFFIC_MAP_MAX_POINTS_PER_PATH=96' payload/cairodrive-google-search-only.js
+grep -Fq 'GemSurfaceView' payload/cairodrive-google-search-only.js
+grep -Fq 'produceWithCoords' payload/cairodrive-google-search-only.js
+grep -Fq 'TRAFFIC_MAP_RENDERED' payload/cairodrive-google-search-only.js
+grep -Fq 'renderer=MagicLane-native' payload/cairodrive-google-search-only.js
+grep -Fq 'replaceSnapshot=yes' payload/cairodrive-google-search-only.js
+! grep -Fq 'differential=yes' payload/cairodrive-google-search-only.js
+grep -Fq 'simplified=yes' payload/cairodrive-google-search-only.js
+grep -Fq 'simplifyTrafficCoordinates' payload/cairodrive-google-search-only.js
+grep -Fq '__trafficMapEntries' payload/cairodrive-google-search-only.js
+grep -Fq 'stockInternals=untouched' payload/cairodrive-google-search-only.js
+! grep -Fq 'onDrawFrameCustom' payload/cairodrive-google-search-only.js
+
+# Removed runtime surfaces must stay out of the production agent.
+! grep -Fq 'AutocompletePanel' payload/cairodrive-google-search-only.js
+! grep -Fq 'NavBanner' payload/cairodrive-google-search-only.js
+! grep -Fq 'CairoLog' payload/cairodrive-google-search-only.js
+! grep -Fq 'driveTraceEnabled' payload/cairodrive-google-search-only.js
+! grep -Fq 'getNavigationInstruction' payload/cairodrive-google-search-only.js
+! grep -Fq 'VOICE_REPEAT' payload/cairodrive-google-search-only.js
+! grep -Fq 'BETTER_ROUTE_' payload/cairodrive-google-search-only.js
+! grep -Fq 'SIMULATION_REWRITE' payload/cairodrive-google-search-only.js
+! grep -Fq 'ROUTE_ALGO_' payload/cairodrive-google-search-only.js
+! grep -Fq 'SOCIAL_REPORT_' payload/cairodrive-google-search-only.js
+! grep -Fq 'NATIVE_SPEED_ALARM' payload/cairodrive-google-search-only.js
 ! grep -Fq 'isNavigationActive(null)' payload/cairodrive-google-search-only.js
-! grep -Fq 'service.isNavigationActive()' payload/cairodrive-google-search-only.js
-! grep -Fq 'isSimulationActive(null)' payload/cairodrive-google-search-only.js
-! grep -Fq 'service.isSimulationActive()' payload/cairodrive-google-search-only.js
 ! grep -Fq 'getNavigationRoute(null)' payload/cairodrive-google-search-only.js
-! grep -Fq 'getNavigationRoute()' payload/cairodrive-google-search-only.js
-! grep -Fq 'getNavigationInstruction(null)' payload/cairodrive-google-search-only.js
-! grep -Fq 'getNavigationInstruction()' payload/cairodrive-google-search-only.js
-grep -Fq 'NAV_SERVICE_WAITING_FOR_REAL_SESSION source=startNavigation-hook failClosed=yes' payload/cairodrive-google-search-only.js
-grep -Fq 'wakeNavigationAssist(20);' payload/cairodrive-google-search-only.js
 
 # Play releases must never reuse the upstream versionCode for a CairoDrive rebuild.
 grep -Fq 'SOURCE_VERSION_CODE=' build_cairodrive.sh
 grep -Fq 'PLAY_VERSION_OFFSET="${GITHUB_RUN_NUMBER:-1}"' build_cairodrive.sh
 grep -Fq -- '--version-code "$PLAY_VERSION_CODE"' build_cairodrive.sh
 grep -Fq 'play_version_code=$PLAY_VERSION_CODE' build_cairodrive.sh
-echo 'VERIFY_REPO: PASS — Git-visible files are GitHub-safe; runtime JNI session safety, monotonic Play versionCode, portable/fail-closed patching, and Play-key signing checks pass.'
+echo 'VERIFY_REPO: PASS — v23.3 minimal stock-UI runtime, simplified optimized native traffic paths, Google Places/traffic hygiene, narrow-road safety, stock performance preservation, monotonic Play versionCode, and Play-key signing checks pass.'

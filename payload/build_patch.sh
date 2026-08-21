@@ -6,8 +6,8 @@ OUTAPK="${3:?}"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 WORK="$(mktemp -d)"
 # frida-compile 19.x requires the entrypoint to live inside the npm project root.
-# Keep the generated file directly in payload/ so its existing ./search-core.mjs,
-# ./nav-core.mjs and ./traffic-core.mjs imports stay valid siblings too.
+# Keep the generated file directly in payload/ so its minimal ./search-core.mjs
+# and ./traffic-core.mjs imports stay valid siblings too.
 AGENT="$(mktemp "$ROOT/.cairodrive-agent.XXXXXX.js")"
 cleanup(){ rm -rf "$WORK"; rm -f "$AGENT"; }
 trap cleanup EXIT INT TERM
@@ -45,16 +45,12 @@ mkdir -p "$WORK/helper-classes" "$WORK/helper-dex"
 echo '==> Compiling CairoDrive helper/bootstrap DEX'
 javac --release 8 -cp "$ANDROID_JAR" -d "$WORK/helper-classes" \
   "$ROOT/helper/com/cairodrive/bootstrap/CairoDriveBootstrapProvider.java" \
-  "$ROOT/helper/com/cairodrive/search/AsyncHttp.java" \
-  "$ROOT/helper/com/cairodrive/search/AutocompletePanel.java" \
-  "$ROOT/helper/com/cairodrive/nav/NavBanner.java" \
-  "$ROOT/helper/com/cairodrive/log/CairoLog.java"
+  "$ROOT/helper/com/cairodrive/search/AsyncHttp.java"
 jar cf "$WORK/cairodrive-helper.jar" -C "$WORK/helper-classes" .
 "$D8" --min-api 21 --lib "$ANDROID_JAR" --output "$WORK/helper-dex" "$WORK/cairodrive-helper.jar" >/dev/null
 [[ -s "$WORK/helper-dex/classes.dex" ]] || { echo 'ERROR: helper DEX missing' >&2; exit 1; }
 
 node "$ROOT/../search_core_selftest.mjs"
-node "$ROOT/../nav_core_selftest.mjs"
 node "$ROOT/../traffic_core_selftest.mjs"
 AGENT_REL="$(basename "$AGENT")"
 cp "$ROOT/cairodrive-google-search-only.js" "$AGENT"
@@ -93,9 +89,8 @@ PYIMPORT
 ./node_modules/.bin/frida-compile "$AGENT_REL" -o "$WORK/libgadget.script.so" -S -c
 [[ -s "$WORK/libgadget.script.so" ]] || { echo 'ERROR: agent bundle missing' >&2; exit 1; }
 
-# Optional performance-only AOT patch. Unknown future compiler layouts simply
-# keep the stock debounce; correctness does not depend on this optimization.
-python3 "$ROOT/../tools/patch_search_debounce.py" "$WORK/root/lib/arm64-v8a/libapp.so"
+# Stock Magic Earth search debounce/performance behavior is intentionally preserved.
+# CairoDrive optimizes only its own Google Places/traffic work.
 
 # Never assume classes7.dex remains free on future releases.
 DEXNUM="$(python3 - "$WORK/root" <<'PY'
