@@ -4,6 +4,7 @@ import argparse, json, re
 from pathlib import Path
 
 RULES = [
+    ("MANIFEST_REWRITE_ARGUMENT", [r"rewrite_manifest\.py: error: argument --version-name-suffix: expected one argument", r"--version-name-suffix: expected one argument"]),
     ("FRIDA_COMPILE_IMPORT_RESOLUTION", [r"error TS-1: Could not resolve", r"Could not resolve [\"\']\./"]),
     ("FRIDA_COMPILE_PROJECT_ROOT", [r"Entrypoint must be inside the project root"]),
     ("FRIDA_INSTALL_OR_BINDING", [r"frida_binding", r"npm (?:ERR|error).*frida", r"npm rebuild frida"]),

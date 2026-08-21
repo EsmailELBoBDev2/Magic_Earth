@@ -79,6 +79,9 @@ grep -q 'actions/cache@v5' .github/workflows/build.yml
 grep -q 'git merge --ff-only origin/main' UPDATE_APK.sh
 grep -q 'npm ci --no-audit --no-fund' payload/build_patch.sh
 grep -q 'PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-22.3}"' build_cairodrive.sh
+grep -q 'VERSION_NAME_SUFFIX="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"' build_cairodrive.sh
+grep -Fq -- '"--version-name-suffix=$VERSION_NAME_SUFFIX"' build_cairodrive.sh
+! grep -Fq -- '--version-name-suffix "${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"' build_cairodrive.sh
 grep -q 'APK="${1:-$ROOT/input/base.apk}"' build_cairodrive.sh
 grep -q 'APK="${1:-$ROOT/input/base.apk}"' build_and_update.sh
 grep -q 'BOOT agent=' watch_search.sh
