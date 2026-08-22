@@ -30,13 +30,21 @@ import {
 'use strict';
 
 const TAG='cairodrive';
-const VERSION='v23.3-minimal-native-traffic-final';
+const VERSION='v23.3-drive-ready-r2';
 const GEM_DART_PORT_OFFSET=__CAIRODRIVE_GEM_DART_PORT_OFFSET__;
 const GEM_POST_COBJECT_SLOT_OFFSET=__CAIRODRIVE_GEM_POST_COBJECT_SLOT_OFFSET__;
 const CONNECT_TIMEOUT_MS=3500;
 const SEARCH_READ_TIMEOUT_MS=4500;
 const TRAFFIC_READ_TIMEOUT_MS=6500;
 const CATEGORY_CONTEXT_TTL_MS=700;
+// Fast native-list mask: only data needed to construct a stock Magic Earth row.
+// Keeping addressComponents preserves Google's structured street_number.
+const FAST_SEARCH_FIELD_MASK=[
+  'places.id','places.displayName','places.formattedAddress',
+  'places.addressComponents','places.location','places.businessStatus',
+  'places.movedPlaceId'
+].join(',');
+const FAST_SEARCH_MAX_RESULTS=10;
 
 let __androidLogWrite=null,__androidLogTag=null;
 function log(s){
@@ -217,7 +225,8 @@ async function googleTextSearch(query,bias,generation,radiusMeters=50000){
   if(!androidNetworkAvailable())return {ok:false,places:[],reason:'offline'};
   migratePrivateState();if(!GOOGLE_PLACES_API_KEY||!resolveIdentity()||googleAuthBlocked||Date.now()<googleBlockedUntil)return {ok:false,places:[],reason:'google-blocked'};
   const body=buildTextSearchBody(q,bias||getLocationBias(),radiusMeters,{});
-  const token=startHttpPost(TEXT_SEARCH_URL,googleHeaders(),body,false,SEARCH_READ_TIMEOUT_MS);
+  body.pageSize=Math.min(FAST_SEARCH_MAX_RESULTS,Math.max(1,Number(body.pageSize)||FAST_SEARCH_MAX_RESULTS));
+  const token=startHttpPost(TEXT_SEARCH_URL,googleHeaders(FAST_SEARCH_FIELD_MASK),body,false,SEARCH_READ_TIMEOUT_MS);
   if(!token)return {ok:false,places:[],reason:'http-helper-unavailable'};
   googleRequests++;const t0=Date.now();log(`GOOGLE_REQUEST endpoint=text qlen=${Array.from(q).length} lang=${inferLang(q)} requestNo=${googleRequests}`);
   return await new Promise(resolve=>{
@@ -243,7 +252,8 @@ async function googleNearbySearch(categoryId,categoryName,bias,generation,radius
   if(!androidNetworkAvailable())return {ok:false,places:[],reason:'offline'};
   migratePrivateState();if(!GOOGLE_PLACES_API_KEY||!resolveIdentity()||googleAuthBlocked||Date.now()<googleBlockedUntil)return {ok:false,places:[],reason:'google-blocked'};
   const body=buildNearbySearchBody(types,bias||getLocationBias(),radiusMeters,inferLang(categoryName||''),{routingSummaries:false});
-  const token=startHttpPost(NEARBY_SEARCH_URL,googleHeaders(),body,false,SEARCH_READ_TIMEOUT_MS);
+  body.maxResultCount=Math.min(FAST_SEARCH_MAX_RESULTS,Math.max(1,Number(body.maxResultCount)||FAST_SEARCH_MAX_RESULTS));
+  const token=startHttpPost(NEARBY_SEARCH_URL,googleHeaders(FAST_SEARCH_FIELD_MASK),body,false,SEARCH_READ_TIMEOUT_MS);
   if(!token)return {ok:false,places:[],reason:'http-helper-unavailable'};
   googleRequests++;const t0=Date.now();log(`GOOGLE_NEARBY_REQUEST categoryId=${categoryId} types=${types.join(',')} requestNo=${googleRequests}`);
   return await new Promise(resolve=>{
@@ -296,7 +306,17 @@ function createLandmark(place){
   if(!id)throw new Error(`Landmark create failed: ${createResp}`);
   const call=(method,argsJson)=>callGemObject(id,'Landmark',method,argsJson,-1);
   call('setName',JSON.stringify(String(place.name||'Google place')));
-  if(Array.isArray(place.addressFields))call('setAddress',JSON.stringify({fields:place.addressFields}));
+  if(Array.isArray(place.addressFields)){
+    const fields=place.addressFields.slice();
+    const street=String(fields[5]||'').replace(/\s+/g,' ').trim();
+    const number=String(fields[6]||'').trim();
+    if(number&&street&&street!==number&&!street.startsWith(number+' '))fields[5]=`${number} ${street}`;
+    // Never parse or invent a number. If Google did not provide structured
+    // street_number, use Google's own formatted address as the stock display line.
+    else if(!number&&String(place.formattedAddress||'').trim())fields[5]=String(place.formattedAddress).trim();
+    call('setAddress',JSON.stringify({fields}));
+    log(`ADDRESS_INJECT streetNumber=${number?'yes':'no'} stockDisplay=${String(fields[5]||'').slice(0,100)}`);
+  }
   call('setCoordinates',JSON.stringify({latitude:Number(place.latitude),longitude:Number(place.longitude)}));
   call('setImageFromIconId','108006');
   return id;
@@ -320,19 +340,30 @@ function postCompleteEvent(listenerIdText){
   return postCObject(int64(dartPort.toString()),obj);
 }
 function finishEmpty(listenerId){try{postCompleteEvent(listenerId);}catch(e){log(`COMPLETE_ERROR ${String(e)}`);}}
-function replayStockSearch(originalRaw,reason){
-  try{
-    const rp=nativeCallOriginal(Memory.allocUtf8String(originalRaw),utf8Length(originalRaw));try{if(rp&&!rp.isNull())libcFree(rp);}catch(_){}
-    log(`NATIVE_SEARCH_FALLBACK reason=${String(reason||'google-failure')}`);return true;
-  }catch(e){log(`NATIVE_SEARCH_FALLBACK_ERROR ${String(e)}`);return false;}
+function finishWithSafeStockFallback(listenerId,reason){
+  // Async Google completion occurs after the intercepted native call returned.
+  // Re-entering libGEM native_call here caused the observed 0x0 access violation.
+  // Finish this request, cool Google briefly, and let the NEXT request pass
+  // synchronously through the untouched stock Magic Earth call path.
+  googleBlockedUntil=Math.max(googleBlockedUntil,Date.now()+15000);
+  log(`NATIVE_SEARCH_FALLBACK_DEFERRED reason=${String(reason||'google-failure')} nextSearch=stock noNativeReentry=yes`);
+  finishEmpty(listenerId);
 }
 function injectPlacesAndComplete(places,listId,listenerId,generation,kind){
-  let injected=0;
-  for(const p of Array.isArray(places)?places:[]){
-    if(generation!==searchGeneration)break;
-    try{const id=createLandmark(p);pushLandmark(listId,id);injected++;}catch(e){log(`NATIVE_INJECT_ERROR ${String(e)}`);}
-  }
-  finishEmpty(listenerId);log(`NATIVE_INJECT kind=${kind} rows=${injected} gen=${generation}`);
+  const rows=Array.isArray(places)?places:[];let injected=0,index=0;
+  // Bound synchronous GEM work so a full result set cannot become one long
+  // native/GL synchronization burst.
+  const step=()=>{
+    if(generation!==searchGeneration){finishEmpty(listenerId);return;}
+    let burst=0;
+    while(index<rows.length&&burst<4){
+      const p=rows[index++];burst++;
+      try{const id=createLandmark(p);pushLandmark(listId,id);injected++;}catch(e){log(`NATIVE_INJECT_ERROR ${String(e)}`);}
+    }
+    if(index<rows.length){setTimeout(step,0);return;}
+    finishEmpty(listenerId);log(`NATIVE_INJECT kind=${kind} rows=${injected} gen=${generation} burstMax=4`);
+  };
+  step();
 }
 
 const pendingCategoryByThread=new Map();
@@ -349,7 +380,7 @@ function deliverTypedSearch(query,listId,listenerId,generation,bias,originalRaw)
     const out=await googleTextSearch(query,bias,generation,50000);
     if(generation!==searchGeneration){finishEmpty(listenerId);return;}
     if(out&&out.ok){injectPlacesAndComplete(out.places,listId,listenerId,generation,'typed');return;}
-    if(!(out&&out.suppressFallback)&&replayStockSearch(originalRaw,out&&out.reason||'google-failure'))return;
+    if(!(out&&out.suppressFallback)){finishWithSafeStockFallback(listenerId,out&&out.reason||'google-failure');return;}
     finishEmpty(listenerId);
   },0);
 }
@@ -358,7 +389,7 @@ function deliverCategorySearch(name,categoryId,types,listId,listenerId,generatio
     const out=await googleNearbySearch(categoryId,name,bias,generation,25000,types);
     if(generation!==searchGeneration){finishEmpty(listenerId);return;}
     if(out&&out.ok){injectPlacesAndComplete(out.places,listId,listenerId,generation,'category');return;}
-    if(!(out&&out.suppressFallback)&&replayStockSearch(originalRaw,out&&out.reason||'nearby-failure'))return;
+    if(!(out&&out.suppressFallback)){finishWithSafeStockFallback(listenerId,out&&out.reason||'nearby-failure');return;}
     finishEmpty(listenerId);
   },0);
 }
@@ -464,20 +495,16 @@ function findJavaEnum(className,wanted){
   }catch(_){}
   return null;
 }
-let __trafficObjectKeepAlive=null;
 function configureNativeTraffic(){
   if(!Java.available)return;
   try{Java.perform(()=>{
     const car=findJavaEnum('com.magiclane.sdk.routesandnavigation.ERouteTransportMode','car');
     __carTransportValue=car?car.value:null;
-    const online=findJavaEnum('com.magiclane.sdk.routesandnavigation.ETrafficUsage','online');
-    if(!online||!online.obj){log('MAGICLANE_TRAFFIC_ENABLE_FAILED reason=online-enum-missing');return;}
-    try{
-      const Traffic=Java.use('com.magiclane.sdk.routesandnavigation.Traffic'),t=Traffic.$new(),prefs=t.getPreferences();
-      prefs.setUseTraffic(online.obj);__trafficObjectKeepAlive=Java.retain(t);
-      log('MAGICLANE_TRAFFIC_ENABLED mode=online source=native-sdk');
-    }catch(e){log(`MAGICLANE_TRAFFIC_ENABLE_FAILED ${String(e)}`);}
-  });}catch(e){log(`MAGICLANE_TRAFFIC_ENABLE_FAILED ${String(e)}`);}
+    // Stock Magic Earth owns its native traffic preference. A second Traffic
+    // object did not enable Egypt traffic and only produced misleading offline
+    // state. Google advisory + native CairoDrive paths are independent.
+    log(`MAGICLANE_TRAFFIC_POLICY owner=stock forceEnable=no googleTrafficIndependent=yes carEnum=${Number.isFinite(__carTransportValue)?'resolved':'unknown'}`);
+  });}catch(e){log(`MAGICLANE_TRAFFIC_POLICY_ERROR ${String(e)}`);}
 }
 
 let __navSession=null,__navGeneration=0,__routeAssistTimer=null,__trafficInFlight=false,__trafficRefreshMs=180000,__lastTrafficRoadblockAt=0;
@@ -830,7 +857,7 @@ function installNavigationCaptureHooks(){
   if(!Java.available)return;
   try{Java.perform(()=>{
     const NS=Java.use('com.magiclane.sdk.routesandnavigation.NavigationService');let count=0;
-    for(const methodName of ['startNavigation','startNavigationWithRoute']){
+    for(const methodName of ['startNavigation','startNavigationWithRoute','startSimulation','startSimulationWithRoute']){
       const m=NS[methodName];if(!m||!m.overloads)continue;
       for(const ov of m.overloads){
         const orig=ov;
@@ -919,14 +946,25 @@ function magicRouteCoordinate(route,distanceM){
   try{return readMagicCoordinate(route.getCoordinateOnRoute(Math.max(0,Math.round(distanceM))));}
   catch(_){try{return readMagicCoordinate(route.getCoordinateOnRoute(Number(distanceM)));}catch(__){return null;}}
 }
-function collectTrafficRouteSnapshot(route){
+function collectTrafficRouteSnapshot(route,cap){
   if(!route||!Java.available)return null;
   try{
     const totalTd=route.getTimeDistance(false),remainTd=route.getTimeDistance(true);if(!totalTd||!remainTd)return null;
     const total=Number(totalTd.getTotalDistance()),remain=Number(remainTd.getTotalDistance());if(!Number.isFinite(total)||!Number.isFinite(remain)||remain<800||total<=0)return null;
     const progressed=Math.max(0,total-remain);
-    const ActivityThread=Java.use('android.app.ActivityThread'),app=ActivityThread.currentApplication();if(!app)return null;
-    const loc=bestLocalLocation(app.getApplicationContext());
+    let simulation=false;
+    try{simulation=!!(cap&&cap.service&&cap.listener&&typeof cap.service.isSimulationActive==='function'&&cap.service.isSimulationActive(cap.listener));}catch(_){}
+    let loc=null;
+    if(simulation){
+      // In SDK simulation the virtual route position is authoritative; real GPS
+      // is intentionally irrelevant.
+      const here=magicRouteCoordinate(route,Math.min(total,progressed+2));
+      const ahead=magicRouteCoordinate(route,Math.min(total,progressed+40));
+      if(here)loc={latitude:here.latitude,longitude:here.longitude,accuracy:5,time:Date.now(),bearing:ahead?bearingDeg(here,ahead):NaN};
+    }else{
+      const ActivityThread=Java.use('android.app.ActivityThread'),app=ActivityThread.currentApplication();if(!app)return null;
+      loc=bestLocalLocation(app.getApplicationContext());
+    }
     if(!loc||!Number.isFinite(loc.latitude)||!Number.isFinite(loc.longitude)||!Number.isFinite(loc.accuracy)||loc.accuracy>50||Date.now()-loc.time>120000)return null;
     const destination=magicRouteCoordinate(route,Math.max(0,total-2));if(!destination)return null;
     const step=Math.max(80,Math.ceil(remain/140/20)*20),samples=[];
@@ -937,7 +975,7 @@ function collectTrafficRouteSnapshot(route){
       a.heading=i+1<samples.length?bearingDeg(a,b):(i?Number(samples[i-1].heading):Number(loc.bearing));
     }
     const vias=[];for(let k=1;k<=6;k++){const c=magicRouteCoordinate(route,progressed+remain*(k/7));if(c)vias.push(c);}
-    return {origin:{latitude:loc.latitude,longitude:loc.longitude},destination,samples,vias,total,remain,progressed,accuracyM:loc.accuracy};
+    return {origin:{latitude:loc.latitude,longitude:loc.longitude},destination,samples,vias,total,remain,progressed,accuracyM:loc.accuracy,mode:simulation?'simulation':'live'};
   }catch(e){log(`GOOGLE_TRAFFIC_SNAPSHOT_ERROR ${String(e)}`);return null;}
 }
 async function requestGoogleTrafficAdvice(snapshot,generation){
@@ -949,7 +987,7 @@ async function requestGoogleTrafficAdvice(snapshot,generation){
   const body=buildTrafficRequest(snapshot.origin,snapshot.destination,{languageCode:'en',routingPreference:'TRAFFIC_AWARE',viaPoints:snapshot.vias});
   const token=startHttpPost(ROUTES_URL,googleRoutesHeaders(),body,true,TRAFFIC_READ_TIMEOUT_MS);
   if(!token){__trafficInFlight=false;return;}
-  const t0=Date.now();log(`GOOGLE_TRAFFIC_REQUEST remainM=${Math.round(snapshot.remain)} samples=${snapshot.samples.length}`);
+  const t0=Date.now();log(`GOOGLE_TRAFFIC_REQUEST mode=${snapshot.mode||'live'} remainM=${Math.round(snapshot.remain)} samples=${snapshot.samples.length}`);
   const result=await new Promise(resolve=>{const tick=()=>{const r=pollHttp(token);if(!r||!r.done){setTimeout(tick,120);return;}resolve(r);};tick();});
   __trafficInFlight=false;
   if(generation!==__navGeneration||!__navSession||!routeServiceActive(__navSession))return;
@@ -982,7 +1020,7 @@ function routeAssistTick(){
   }
   const route=currentRoute(cap);if(!route){scheduleRouteAssist(5000);return;}
   maybeAvoidNarrow(route);
-  const snap=collectTrafficRouteSnapshot(route);
+  const snap=collectTrafficRouteSnapshot(route,cap);
   if(snap)setTimeout(()=>requestGoogleTrafficAdvice(snap,cap.generation),0);
   scheduleRouteAssist(__trafficRefreshMs);
 }
@@ -1065,7 +1103,7 @@ function installGem(m){
 
   configureNativeTraffic();
   installNavigationCaptureHooks();
-  log('CAIRODRIVE_READY scope=google-places+google-traffic-advisory+native-traffic-paths+narrow-road stockUI=yes stockNavigation=yes stockInternals=untouched');
+  log('CAIRODRIVE_READY scope=google-places+google-traffic-advisory+native-traffic-paths+narrow-road stockUI=yes stockNavigation=yes stockInternals=untouched driveReady=r2');
 }
 
 log(`BOOT agent=${VERSION} scope=minimal googleKey=${GOOGLE_PLACES_API_KEY?'yes':'no'}`);

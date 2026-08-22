@@ -109,6 +109,7 @@ python3 -m py_compile tools/*.py ci/*.py experiments/*.py
 cp payload/cairodrive-google-search-only.js "$TMP/agent.mjs"; node --check "$TMP/agent.mjs"
 node search_core_selftest.mjs >/dev/null
 node traffic_core_selftest.mjs >/dev/null
+node drive_ready_corridor_selftest.mjs >/dev/null
 grep -q 'push:' .github/workflows/build.yml
 [[ -x ci/validate-signing-key.sh ]]
 grep -Fq 'secrets.CAIRODRIVE_KEYSTORE_BASE64' .github/workflows/build.yml
@@ -121,10 +122,20 @@ grep -Fq 'EXPECTED_UPLOAD_CERT_SHA1: D9:19:59:58:60:C9:47:E3:FC:A6:5A:16:EF:FB:B
 grep -Fq 'Play signing fingerprint guard: PASS' build_cairodrive.sh
 
 # v23.3 minimal runtime regression guards.
-grep -Fq "VERSION='v23.3-minimal-native-traffic-final'" payload/cairodrive-google-search-only.js
+grep -Fq "VERSION='v23.3-drive-ready-r2'" payload/cairodrive-google-search-only.js
 grep -Fq 'SEARCH_INTERCEPT kind=typed' payload/cairodrive-google-search-only.js
 grep -Fq 'SEARCH_INTERCEPT kind=category' payload/cairodrive-google-search-only.js
-grep -Fq 'MAGICLANE_TRAFFIC_ENABLED mode=online' payload/cairodrive-google-search-only.js
+grep -Fq 'FAST_SEARCH_MAX_RESULTS=10' payload/cairodrive-google-search-only.js
+grep -Fq 'ADDRESS_INJECT streetNumber=' payload/cairodrive-google-search-only.js
+grep -Fq 'NATIVE_SEARCH_FALLBACK_DEFERRED' payload/cairodrive-google-search-only.js
+grep -Fq 'noNativeReentry=yes' payload/cairodrive-google-search-only.js
+! grep -Fq 'replayStockSearch(' payload/cairodrive-google-search-only.js
+grep -Fq 'burstMax=4' payload/cairodrive-google-search-only.js
+grep -Fq "'startSimulation'" payload/cairodrive-google-search-only.js
+grep -Fq "'startSimulationWithRoute'" payload/cairodrive-google-search-only.js
+grep -Fq "mode:simulation?'simulation':'live'" payload/cairodrive-google-search-only.js
+grep -Fq 'MAGICLANE_TRAFFIC_POLICY owner=stock forceEnable=no' payload/cairodrive-google-search-only.js
+! grep -Fq 'Traffic.$new()' payload/cairodrive-google-search-only.js
 grep -Fq "nk==='avoidunpavedroads'" payload/cairodrive-google-search-only.js
 grep -Fq "nk==='buildterrainprofile'" payload/cairodrive-google-search-only.js
 grep -Fq 'NARROW_EVIDENCE' payload/cairodrive-google-search-only.js
@@ -166,4 +177,4 @@ grep -Fq 'SOURCE_VERSION_CODE=' build_cairodrive.sh
 grep -Fq 'PLAY_VERSION_OFFSET="${GITHUB_RUN_NUMBER:-1}"' build_cairodrive.sh
 grep -Fq -- '--version-code "$PLAY_VERSION_CODE"' build_cairodrive.sh
 grep -Fq 'play_version_code=$PLAY_VERSION_CODE' build_cairodrive.sh
-echo 'VERIFY_REPO: PASS — v23.3 minimal stock-UI runtime, simplified optimized native traffic paths, Google Places/traffic hygiene, narrow-road safety, stock performance preservation, monotonic Play versionCode, and Play-key signing checks pass.'
+echo 'VERIFY_REPO: PASS — v23.3 drive-ready r2: lean Google Places, safe stock fallback, simulation-aware Google traffic, conservative narrow-road handling, bounded native traffic rendering, stock performance preservation, monotonic Play versionCode, and Play-key signing checks pass.'
