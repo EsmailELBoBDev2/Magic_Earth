@@ -23,9 +23,14 @@ node --check "$TMP/agent.mjs"
 grep -q 'GEM_DART_PORT_OFFSET' payload/cairodrive-google-search-only.js
 grep -q 'GEM_POST_COBJECT_SLOT_OFFSET' payload/cairodrive-google-search-only.js
 grep -Fq "VERSION='v23.3-drive-ready-r2'" payload/cairodrive-google-search-only.js
-grep -Fq "RUNTIME_TUNING='r3-fast-reliable'" payload/cairodrive-google-search-only.js
+grep -Fq "RUNTIME_TUNING='r4-peak-safe'" payload/cairodrive-google-search-only.js
 grep -Fq 'SEARCH_POLL_MS=20' payload/cairodrive-google-search-only.js
 grep -Fq 'NEARBY_POLL_MS=25' payload/cairodrive-google-search-only.js
+grep -Fq 'NAV_INITIAL_ASSIST_MS=400' payload/cairodrive-google-search-only.js
+grep -Fq 'TRAFFIC_POLL_MS=40' payload/cairodrive-google-search-only.js
+grep -Fq 'ROADBLOCK_BINDINGS_CACHED' payload/cairodrive-google-search-only.js
+grep -Fq 'bindingCached=yes' payload/cairodrive-google-search-only.js
+grep -Fq 'initialAssistRetryDelay' payload/cairodrive-google-search-only.js
 grep -Fq 'GOOGLE_RETRY endpoint=text' payload/cairodrive-google-search-only.js
 grep -Fq 'GOOGLE_EMPTY' payload/cairodrive-google-search-only.js
 grep -Fq 'carEnum=known-id-0' payload/cairodrive-google-search-only.js
@@ -76,4 +81,4 @@ grep -Fq 'stockInternals=untouched' payload/cairodrive-google-search-only.js
 ! grep -RqsE 'AIza[0-9A-Za-z_-]{25,}' payload
 file payload/libcairodrive_filter.so | grep -qi 'aarch64\|ARM64'
 
-echo 'v23.3 R2 + R3 fast/reliable hotfix static verification: PASS'
+echo 'v23.3 R2 + R4 peak-safe runtime tuning static verification: PASS'

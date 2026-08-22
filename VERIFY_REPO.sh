@@ -123,6 +123,11 @@ grep -Fq 'Play signing fingerprint guard: PASS' build_cairodrive.sh
 
 # v23.3 minimal runtime regression guards.
 grep -Fq "VERSION='v23.3-drive-ready-r2'" payload/cairodrive-google-search-only.js
+grep -Fq "RUNTIME_TUNING='r4-peak-safe'" payload/cairodrive-google-search-only.js
+grep -Fq 'NAV_INITIAL_ASSIST_MS=400' payload/cairodrive-google-search-only.js
+grep -Fq 'TRAFFIC_POLL_MS=40' payload/cairodrive-google-search-only.js
+grep -Fq 'ROADBLOCK_BINDINGS_CACHED' payload/cairodrive-google-search-only.js
+grep -Fq 'bindingCached=yes' payload/cairodrive-google-search-only.js
 grep -Fq 'SEARCH_INTERCEPT kind=typed' payload/cairodrive-google-search-only.js
 grep -Fq 'SEARCH_INTERCEPT kind=category' payload/cairodrive-google-search-only.js
 grep -Fq 'FAST_SEARCH_MAX_RESULTS=10' payload/cairodrive-google-search-only.js

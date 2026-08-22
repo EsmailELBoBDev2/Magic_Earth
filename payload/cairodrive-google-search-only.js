@@ -31,7 +31,7 @@ import {
 
 const TAG='cairodrive';
 const VERSION='v23.3-drive-ready-r2';
-const RUNTIME_TUNING='r3-fast-reliable';
+const RUNTIME_TUNING='r4-peak-safe';
 const GEM_DART_PORT_OFFSET=__CAIRODRIVE_GEM_DART_PORT_OFFSET__;
 const GEM_POST_COBJECT_SLOT_OFFSET=__CAIRODRIVE_GEM_POST_COBJECT_SLOT_OFFSET__;
 const CONNECT_TIMEOUT_MS=3500;
@@ -41,6 +41,8 @@ const CATEGORY_CONTEXT_TTL_MS=700;
 const SEARCH_POLL_MS=20;
 const NEARBY_POLL_MS=25;
 const FAST_RETRY_DELAY_MS=90;
+const NAV_INITIAL_ASSIST_MS=400;
+const TRAFFIC_POLL_MS=40;
 // Fast native-list mask: only data needed to construct a stock Magic Earth row.
 // Keeping addressComponents preserves Google's structured street_number.
 const FAST_SEARCH_FIELD_MASK=[
@@ -531,6 +533,7 @@ function configureNativeTraffic(){
 }
 
 let __navSession=null,__navGeneration=0,__routeAssistTimer=null,__trafficInFlight=false,__trafficRefreshMs=180000,__lastTrafficRoadblockAt=0;
+let __roadBlockBindings=null;
 const __narrowAvoided=new Map();
 
 /*
@@ -864,7 +867,13 @@ function currentRoute(cap){
 }
 function scheduleRouteAssist(delayMs=2000){
   try{if(__routeAssistTimer)clearTimeout(__routeAssistTimer);}catch(_){}
-  __routeAssistTimer=setTimeout(routeAssistTick,Math.max(500,Number(delayMs)||2000));
+  __routeAssistTimer=setTimeout(routeAssistTick,Math.max(250,Number(delayMs)||2000));
+}
+function initialAssistRetryDelay(ageMs){
+  const age=Math.max(0,Number(ageMs)||0);
+  if(age<1200)return 400;
+  if(age<4000)return 700;
+  return 1500;
 }
 function captureNavigationSession(service,args){
   let listener=null;
@@ -872,9 +881,9 @@ function captureNavigationSession(service,args){
   if(!listener)return;
   __navGeneration++;
   __navSession={service:Java.retain(service),listener:Java.retain(listener),at:Date.now(),generation:__navGeneration};
-  __trafficRefreshMs=180000;__trafficInFlight=false;
-  log(`NAV_SESSION_CAPTURED listener=${javaObjectClassName(listener)} minimalAssist=traffic+narrow`);
-  scheduleRouteAssist(1800);
+  __trafficRefreshMs=180000;__trafficInFlight=false;__roadBlockBindings=null;
+  log(`NAV_SESSION_CAPTURED listener=${javaObjectClassName(listener)} minimalAssist=traffic+narrow firstAssistMs=${NAV_INITIAL_ASSIST_MS}`);
+  scheduleRouteAssist(NAV_INITIAL_ASSIST_MS);
 }
 function installNavigationCaptureHooks(){
   if(!Java.available)return;
@@ -902,15 +911,27 @@ function objectNativeKey(obj){
   try{if(obj.$h!==undefined)return String(obj.$h);}catch(_){}
   try{return `${obj.$className||'obj'}:${String(obj)}`;}catch(_){return '';}
 }
+function resolveRoadBlockBindings(cap){
+  if(__roadBlockBindings)return __roadBlockBindings;
+  const out=[];
+  try{
+    const f=cap&&cap.service&&cap.service.setNavigationRoadBlock,ovs=f&&f.overloads?f.overloads:[];
+    for(const ov of ovs){
+      const types=(ov.argumentTypes||[]).map(x=>String(x.className||x.name||x));
+      if(types.filter(t=>/\bint\b/.test(t)).length>=2)out.push({ov,types});
+    }
+  }catch(e){log(`ROADBLOCK_BINDING_ERROR ${String(e)}`);}
+  __roadBlockBindings=out;
+  log(`ROADBLOCK_BINDINGS_CACHED count=${out.length}`);
+  return out;
+}
 function invokeNavigationRoadBlock(lengthM,startDistanceM,reason){
   const cap=__navSession;if(!cap||!routeServiceActive(cap))return false;
   const length=Math.max(30,Math.min(1200,Math.round(Number(lengthM)||0))),start=Math.max(0,Math.min(5000,Math.round(Number(startDistanceM)||0)));
   try{
-    const f=cap.service.setNavigationRoadBlock,ovs=f&&f.overloads?f.overloads:[];
-    for(const ov of ovs){
-      const types=(ov.argumentTypes||[]).map(x=>String(x.className||x.name||x));
-      if(types.filter(t=>/\bint\b/.test(t)).length<2)continue;
-      let intIndex=0,supported=true;const mapped=[];
+    for(const binding of resolveRoadBlockBindings(cap)){
+      const ov=binding.ov,types=binding.types;
+      let intIndex=0;const mapped=[];
       for(const t of types){
         if(/\bint\b/.test(t))mapped.push(intIndex++===0?length:start);
         else if(/NavigationListener/.test(t))mapped.push(cap.listener);
@@ -921,7 +942,7 @@ function invokeNavigationRoadBlock(lengthM,startDistanceM,reason){
       }
       try{
         ov.call(cap.service,...mapped);
-        log(`${reason==='narrow'?'NARROW':'GOOGLE_TRAFFIC'}_ROADBLOCK_APPLIED lengthM=${length} startAheadM=${start}`);
+        log(`${reason==='narrow'?'NARROW':'GOOGLE_TRAFFIC'}_ROADBLOCK_APPLIED lengthM=${length} startAheadM=${start} bindingCached=yes`);
         scheduleRouteAssist(4500);return true;
       }catch(_){}
     }
@@ -1011,7 +1032,7 @@ async function requestGoogleTrafficAdvice(snapshot,generation){
   const token=startHttpPost(ROUTES_URL,googleRoutesHeaders(),body,true,TRAFFIC_READ_TIMEOUT_MS);
   if(!token){__trafficInFlight=false;return;}
   const t0=Date.now();log(`GOOGLE_TRAFFIC_REQUEST mode=${snapshot.mode||'live'} remainM=${Math.round(snapshot.remain)} samples=${snapshot.samples.length}`);
-  const result=await new Promise(resolve=>{const tick=()=>{const r=pollHttp(token);if(!r||!r.done){setTimeout(tick,120);return;}resolve(r);};tick();});
+  const result=await new Promise(resolve=>{const tick=()=>{const r=pollHttp(token);if(!r||!r.done){setTimeout(tick,TRAFFIC_POLL_MS);return;}resolve(r);};tick();});
   __trafficInFlight=false;
   if(generation!==__navGeneration||!__navSession||!routeServiceActive(__navSession))return;
   if(result.cancelled)return;
@@ -1037,15 +1058,24 @@ async function requestGoogleTrafficAdvice(snapshot,generation){
 function routeAssistTick(){
   __routeAssistTimer=null;
   const cap=__navSession;if(!cap)return;
+  const age=Math.max(0,Date.now()-cap.at);
   if(!routeServiceActive(cap)){
-    if(Date.now()-cap.at<20000){scheduleRouteAssist(4000);return;}
-    __navSession=null;__trafficMapPending=null;enqueueTrafficMapJob('clear','navigation-ended');return;
+    if(age<20000){scheduleRouteAssist(initialAssistRetryDelay(age));return;}
+    __navSession=null;__trafficMapPending=null;__roadBlockBindings=null;enqueueTrafficMapJob('clear','navigation-ended');return;
   }
-  const route=currentRoute(cap);if(!route){scheduleRouteAssist(5000);return;}
+  const route=currentRoute(cap);
+  if(!route){scheduleRouteAssist(initialAssistRetryDelay(age));return;}
   maybeAvoidNarrow(route);
   const snap=collectTrafficRouteSnapshot(route,cap);
-  if(snap)setTimeout(()=>requestGoogleTrafficAdvice(snap,cap.generation),0);
-  scheduleRouteAssist(__trafficRefreshMs);
+  if(snap){
+    setTimeout(()=>requestGoogleTrafficAdvice(snap,cap.generation),0);
+    scheduleRouteAssist(__trafficRefreshMs);
+    return;
+  }
+  // A 400 ms first assist can legitimately beat GPS/route readiness. Retry
+  // briefly instead of turning one early miss into a 2-5 minute traffic delay.
+  if(age<8000){scheduleRouteAssist(initialAssistRetryDelay(age));return;}
+  scheduleRouteAssist(Math.min(__trafficRefreshMs,15000));
 }
 
 let __nativeFilterModule=null;
