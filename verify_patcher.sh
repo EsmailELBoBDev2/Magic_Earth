@@ -23,6 +23,13 @@ node --check "$TMP/agent.mjs"
 grep -q 'GEM_DART_PORT_OFFSET' payload/cairodrive-google-search-only.js
 grep -q 'GEM_POST_COBJECT_SLOT_OFFSET' payload/cairodrive-google-search-only.js
 grep -Fq "VERSION='v23.3-drive-ready-r2'" payload/cairodrive-google-search-only.js
+grep -Fq "RUNTIME_TUNING='r3-fast-reliable'" payload/cairodrive-google-search-only.js
+grep -Fq 'SEARCH_POLL_MS=20' payload/cairodrive-google-search-only.js
+grep -Fq 'NEARBY_POLL_MS=25' payload/cairodrive-google-search-only.js
+grep -Fq 'GOOGLE_RETRY endpoint=text' payload/cairodrive-google-search-only.js
+grep -Fq 'GOOGLE_EMPTY' payload/cairodrive-google-search-only.js
+grep -Fq 'carEnum=known-id-0' payload/cairodrive-google-search-only.js
+grep -Fq 'hotfix=${RUNTIME_TUNING}' payload/cairodrive-google-search-only.js
 grep -Fq 'SEARCH_INTERCEPT kind=typed' payload/cairodrive-google-search-only.js
 grep -Fq 'SEARCH_INTERCEPT kind=category' payload/cairodrive-google-search-only.js
 grep -Fq 'FAST_SEARCH_MAX_RESULTS=10' payload/cairodrive-google-search-only.js
@@ -30,6 +37,7 @@ grep -Fq 'ADDRESS_INJECT streetNumber=' payload/cairodrive-google-search-only.js
 grep -Fq 'NATIVE_SEARCH_FALLBACK_DEFERRED' payload/cairodrive-google-search-only.js
 grep -Fq 'noNativeReentry=yes' payload/cairodrive-google-search-only.js
 ! grep -Fq 'replayStockSearch(' payload/cairodrive-google-search-only.js
+! grep -Fq 'Date.now()+15000' payload/cairodrive-google-search-only.js
 grep -Fq 'burstMax=4' payload/cairodrive-google-search-only.js
 grep -Fq "'startSimulation'" payload/cairodrive-google-search-only.js
 grep -Fq "'startSimulationWithRoute'" payload/cairodrive-google-search-only.js
@@ -68,4 +76,4 @@ grep -Fq 'stockInternals=untouched' payload/cairodrive-google-search-only.js
 ! grep -RqsE 'AIza[0-9A-Za-z_-]{25,}' payload
 file payload/libcairodrive_filter.so | grep -qi 'aarch64\|ARM64'
 
-echo 'v23.3 drive-ready r2 stock-UI + optimized native traffic static verification: PASS'
+echo 'v23.3 R2 + R3 fast/reliable hotfix static verification: PASS'

@@ -31,12 +31,16 @@ import {
 
 const TAG='cairodrive';
 const VERSION='v23.3-drive-ready-r2';
+const RUNTIME_TUNING='r3-fast-reliable';
 const GEM_DART_PORT_OFFSET=__CAIRODRIVE_GEM_DART_PORT_OFFSET__;
 const GEM_POST_COBJECT_SLOT_OFFSET=__CAIRODRIVE_GEM_POST_COBJECT_SLOT_OFFSET__;
 const CONNECT_TIMEOUT_MS=3500;
-const SEARCH_READ_TIMEOUT_MS=4500;
+const SEARCH_READ_TIMEOUT_MS=3500;
 const TRAFFIC_READ_TIMEOUT_MS=6500;
 const CATEGORY_CONTEXT_TTL_MS=700;
+const SEARCH_POLL_MS=20;
+const NEARBY_POLL_MS=25;
+const FAST_RETRY_DELAY_MS=90;
 // Fast native-list mask: only data needed to construct a stock Magic Earth row.
 // Keeping addressComponents preserves Google's structured street_number.
 const FAST_SEARCH_FIELD_MASK=[
@@ -232,15 +236,18 @@ async function googleTextSearch(query,bias,generation,radiusMeters=50000){
   return await new Promise(resolve=>{
     const tick=()=>{
       if(generation!==searchGeneration){cancelHttp(token);googleCancelled++;resolve({ok:false,places:[],reason:'stale',suppressFallback:true});return;}
-      const r=pollHttp(token);if(!r||!r.done){setTimeout(tick,60);return;}
+      const r=pollHttp(token);if(!r||!r.done){setTimeout(tick,SEARCH_POLL_MS);return;}
       if(r.cancelled){resolve({ok:false,places:[],reason:'cancelled',suppressFallback:true});return;}
-      if(r.error){markPlacesNetworkFailure();log(`GOOGLE_NETWORK_ERROR ${String(r.error).slice(0,180)}`);resolve({ok:false,places:[],reason:'network'});return;}
+      if(r.error){__networkAvailableAt=0;log(`GOOGLE_NETWORK_ERROR ${String(r.error).slice(0,180)}`);resolve({ok:false,places:[],reason:'network'});return;}
       if(r.status<200||r.status>=300){
         const f=classifyGoogleFailure(r.status,r.body);
-        if(f.kind==='auth')googleAuthBlocked=true;else if(Number.isFinite(f.cooldownMs)&&f.cooldownMs>0)googleBlockedUntil=Date.now()+f.cooldownMs;
+        if(f.kind==='auth')googleBlockedUntil=Math.max(googleBlockedUntil,Date.now()+60000);
+        else if(Number.isFinite(f.cooldownMs)&&f.cooldownMs>0)googleBlockedUntil=Date.now()+f.cooldownMs;
         log(`GOOGLE_HTTP status=${r.status} kind=${f.kind} code=${f.code||'none'}`);resolve({ok:false,places:[],reason:`http-${r.status}`});return;
       }
-      try{const places=parsePlacesResponse(r.body);googleSuccess++;log(`GOOGLE_OK results=${places.length} ms=${Date.now()-t0} successNo=${googleSuccess}`);resolve({ok:true,places});}
+      try{const places=parsePlacesResponse(r.body);
+        if(!places.length){log(`GOOGLE_EMPTY qlen=${Array.from(q).length}`);resolve({ok:false,places:[],reason:'empty'});return;}
+        googleSuccess++;log(`GOOGLE_OK results=${places.length} ms=${Date.now()-t0} successNo=${googleSuccess}`);resolve({ok:true,places});}
       catch(e){log(`GOOGLE_PARSE_ERROR ${String(e)}`);resolve({ok:false,places:[],reason:'parse'});}
     };tick();
   });
@@ -259,15 +266,18 @@ async function googleNearbySearch(categoryId,categoryName,bias,generation,radius
   return await new Promise(resolve=>{
     const tick=()=>{
       if(generation!==searchGeneration){cancelHttp(token);googleCancelled++;resolve({ok:false,places:[],reason:'stale',suppressFallback:true});return;}
-      const r=pollHttp(token);if(!r||!r.done){setTimeout(tick,80);return;}
+      const r=pollHttp(token);if(!r||!r.done){setTimeout(tick,NEARBY_POLL_MS);return;}
       if(r.cancelled){resolve({ok:false,places:[],reason:'cancelled',suppressFallback:true});return;}
-      if(r.error){markPlacesNetworkFailure();log(`GOOGLE_NEARBY_NETWORK_ERROR ${String(r.error).slice(0,160)}`);resolve({ok:false,places:[],reason:'network'});return;}
+      if(r.error){__networkAvailableAt=0;log(`GOOGLE_NEARBY_NETWORK_ERROR ${String(r.error).slice(0,160)}`);resolve({ok:false,places:[],reason:'network'});return;}
       if(r.status<200||r.status>=300){
         const f=classifyGoogleFailure(r.status,r.body);
-        if(f.kind==='auth')googleAuthBlocked=true;else if(Number.isFinite(f.cooldownMs)&&f.cooldownMs>0)googleBlockedUntil=Date.now()+f.cooldownMs;
+        if(f.kind==='auth')googleBlockedUntil=Math.max(googleBlockedUntil,Date.now()+60000);
+        else if(Number.isFinite(f.cooldownMs)&&f.cooldownMs>0)googleBlockedUntil=Date.now()+f.cooldownMs;
         log(`GOOGLE_NEARBY_HTTP status=${r.status} kind=${f.kind}`);resolve({ok:false,places:[],reason:`http-${r.status}`});return;
       }
-      try{const places=parsePlacesResponse(r.body);googleSuccess++;log(`GOOGLE_NEARBY_OK categoryId=${categoryId} results=${places.length} ms=${Date.now()-t0}`);resolve({ok:true,places});}
+      try{const places=parsePlacesResponse(r.body);
+        if(!places.length){log(`GOOGLE_NEARBY_EMPTY categoryId=${categoryId}`);resolve({ok:false,places:[],reason:'empty'});return;}
+        googleSuccess++;log(`GOOGLE_NEARBY_OK categoryId=${categoryId} results=${places.length} ms=${Date.now()-t0}`);resolve({ok:true,places});}
       catch(e){log(`GOOGLE_NEARBY_PARSE_ERROR ${String(e)}`);resolve({ok:false,places:[],reason:'parse'});}
     };tick();
   });
@@ -345,8 +355,12 @@ function finishWithSafeStockFallback(listenerId,reason){
   // Re-entering libGEM native_call here caused the observed 0x0 access violation.
   // Finish this request, cool Google briefly, and let the NEXT request pass
   // synchronously through the untouched stock Magic Earth call path.
-  googleBlockedUntil=Math.max(googleBlockedUntil,Date.now()+15000);
-  log(`NATIVE_SEARCH_FALLBACK_DEFERRED reason=${String(reason||'google-failure')} nextSearch=stock noNativeReentry=yes`);
+  const why=String(reason||'google-failure');
+  // Do not make Google appear to disappear for 15 seconds after one transient
+  // DNS/empty/parse miss. Longer auth/quota cooldowns already set above win.
+  const localCooldown=why==='empty'?500:(why==='network'?2000:(why==='parse'?1000:3000));
+  googleBlockedUntil=Math.max(googleBlockedUntil,Date.now()+localCooldown);
+  log(`NATIVE_SEARCH_FALLBACK_DEFERRED reason=${why} cooldownMs=${localCooldown} nextSearch=stock noNativeReentry=yes`);
   finishEmpty(listenerId);
 }
 function injectPlacesAndComplete(places,listId,listenerId,generation,kind){
@@ -377,8 +391,14 @@ function biasFromSearchArgs(args){
 }
 function deliverTypedSearch(query,listId,listenerId,generation,bias,originalRaw){
   setTimeout(async()=>{
-    const out=await googleTextSearch(query,bias,generation,50000);
+    let out=await googleTextSearch(query,bias,generation,50000);
     if(generation!==searchGeneration){finishEmpty(listenerId);return;}
+    if(out&&!out.ok&&!out.suppressFallback&&['network','empty','parse'].includes(String(out.reason||''))){
+      log(`GOOGLE_RETRY endpoint=text reason=${out.reason}`);
+      await new Promise(r=>setTimeout(r,FAST_RETRY_DELAY_MS));
+      if(generation!==searchGeneration){finishEmpty(listenerId);return;}
+      out=await googleTextSearch(query,bias,generation,50000);
+    }
     if(out&&out.ok){injectPlacesAndComplete(out.places,listId,listenerId,generation,'typed');return;}
     if(!(out&&out.suppressFallback)){finishWithSafeStockFallback(listenerId,out&&out.reason||'google-failure');return;}
     finishEmpty(listenerId);
@@ -386,8 +406,14 @@ function deliverTypedSearch(query,listId,listenerId,generation,bias,originalRaw)
 }
 function deliverCategorySearch(name,categoryId,types,listId,listenerId,generation,bias,originalRaw){
   setTimeout(async()=>{
-    const out=await googleNearbySearch(categoryId,name,bias,generation,25000,types);
+    let out=await googleNearbySearch(categoryId,name,bias,generation,25000,types);
     if(generation!==searchGeneration){finishEmpty(listenerId);return;}
+    if(out&&!out.ok&&!out.suppressFallback&&['network','empty','parse'].includes(String(out.reason||''))){
+      log(`GOOGLE_RETRY endpoint=nearby reason=${out.reason}`);
+      await new Promise(r=>setTimeout(r,FAST_RETRY_DELAY_MS));
+      if(generation!==searchGeneration){finishEmpty(listenerId);return;}
+      out=await googleNearbySearch(categoryId,name,bias,generation,25000,types);
+    }
     if(out&&out.ok){injectPlacesAndComplete(out.places,listId,listenerId,generation,'category');return;}
     if(!(out&&out.suppressFallback)){finishWithSafeStockFallback(listenerId,out&&out.reason||'nearby-failure');return;}
     finishEmpty(listenerId);
@@ -449,7 +475,10 @@ function handleGemDispatch(raw){
  * Everything else (route type, traffic avoidance policy, alternatives, heading,
  * online calculation, path algorithm, waypoint approach) remains stock.
  */
-let __carTransportValue=null;
+// Magic Lane's published transport-mode ID is stable: Car=0, Lorry=1,
+// Pedestrian=2, Bicycle=3, Public=4, SharedVehicles=5. Using the numeric ID
+// avoids a generated-wrapper enum lookup on startup and fixes carEnum=unknown.
+const __carTransportValue=0;
 function normKey(k){return String(k||'').replace(/[^a-z0-9]/gi,'').toLowerCase();}
 function inspectTransportMode(root){
   let found=null;const seen=new Set();
@@ -496,15 +525,9 @@ function findJavaEnum(className,wanted){
   return null;
 }
 function configureNativeTraffic(){
-  if(!Java.available)return;
-  try{Java.perform(()=>{
-    const car=findJavaEnum('com.magiclane.sdk.routesandnavigation.ERouteTransportMode','car');
-    __carTransportValue=car?car.value:null;
-    // Stock Magic Earth owns its native traffic preference. A second Traffic
-    // object did not enable Egypt traffic and only produced misleading offline
-    // state. Google advisory + native CairoDrive paths are independent.
-    log(`MAGICLANE_TRAFFIC_POLICY owner=stock forceEnable=no googleTrafficIndependent=yes carEnum=${Number.isFinite(__carTransportValue)?'resolved':'unknown'}`);
-  });}catch(e){log(`MAGICLANE_TRAFFIC_POLICY_ERROR ${String(e)}`);}
+  // Stock Magic Earth owns its native traffic preference. Google advisory is
+  // independent. No Java enum/object creation belongs on the startup hot path.
+  log('MAGICLANE_TRAFFIC_POLICY owner=stock forceEnable=no googleTrafficIndependent=yes carEnum=known-id-0');
 }
 
 let __navSession=null,__navGeneration=0,__routeAssistTimer=null,__trafficInFlight=false,__trafficRefreshMs=180000,__lastTrafficRoadblockAt=0;
@@ -995,7 +1018,7 @@ async function requestGoogleTrafficAdvice(snapshot,generation){
   if(result.error){googleRoutesBlockedUntil=Date.now()+60000;log(`GOOGLE_TRAFFIC_NETWORK_ERROR ${String(result.error).slice(0,160)}`);return;}
   if(result.status<200||result.status>=300){
     const f=classifyGoogleFailure(result.status,result.body);
-    if(f.kind==='auth')googleRoutesAuthBlocked=true;else googleRoutesBlockedUntil=Date.now()+(Number.isFinite(f.cooldownMs)&&f.cooldownMs>0?f.cooldownMs:60000);
+    if(f.kind==='auth')googleRoutesBlockedUntil=Date.now()+60000;else googleRoutesBlockedUntil=Date.now()+(Number.isFinite(f.cooldownMs)&&f.cooldownMs>0?f.cooldownMs:60000);
     log(`GOOGLE_TRAFFIC_HTTP status=${result.status} kind=${f.kind}`);return;
   }
   try{
@@ -1101,20 +1124,25 @@ function installGem(m){
     log('GEM_FILTER_FALLBACK scope=google-places+minimal-route-fields');
   }
 
+  // This is now log-only and cheap; keep it immediate.
   configureNativeTraffic();
-  installNavigationCaptureHooks();
-  log('CAIRODRIVE_READY scope=google-places+google-traffic-advisory+native-traffic-paths+narrow-road stockUI=yes stockNavigation=yes stockInternals=untouched driveReady=r2');
+  // Java wrapper hook installation is unnecessary for the launch/search hot
+  // path. Install it after the stock UI has had time to render.
+  setTimeout(()=>{try{installNavigationCaptureHooks();log('DEFERRED_NAV_HOOKS_READY');}catch(e){log(`DEFERRED_NAV_HOOKS_ERROR ${String(e)}`);}},900);
+  log(`CAIRODRIVE_READY scope=google-places+google-traffic-advisory+native-traffic-paths+narrow-road stockUI=yes stockNavigation=yes stockInternals=untouched driveReady=r2 hotfix=${RUNTIME_TUNING} startupFast=yes`);
 }
 
 log(`BOOT agent=${VERSION} scope=minimal googleKey=${GOOGLE_PLACES_API_KEY?'yes':'no'}`);
-setTimeout(()=>{migratePrivateState(true);resolveIdentity();},600);
+// Prewarm only search-critical state after the first launch burst. Search no
+// longer pays prefs/cert/helper setup when the user first opens the search box.
+setTimeout(()=>{try{migratePrivateState(true);resolveIdentity();ensureAsyncHttp();androidNetworkAvailable(true);}catch(e){log(`SEARCH_WARMUP_ERROR ${String(e)}`);}},300);
 
 let tries=0;
 const timer=setInterval(()=>{
   tries++;
   try{
     const m=Process.findModuleByName('libGEM.so');
-    if(m){clearInterval(timer);setTimeout(()=>{try{installGem(Process.findModuleByName('libGEM.so')||m);}catch(e){log(`INSTALL_GEM_ERROR ${String(e)}`);}},80);}
-    else if(tries%100===0)log(`WAIT_GEM tries=${tries}`);
+    if(m){clearInterval(timer);setTimeout(()=>{try{installGem(Process.findModuleByName('libGEM.so')||m);}catch(e){log(`INSTALL_GEM_ERROR ${String(e)}`);}},10);}
+    else if(tries%200===0)log(`WAIT_GEM tries=${tries}`);
   }catch(e){log(`WAIT_GEM_ERROR ${String(e)}`);}
-},100);
+},50);
