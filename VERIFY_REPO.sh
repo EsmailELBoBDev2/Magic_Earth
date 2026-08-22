@@ -103,6 +103,12 @@ p=json.load(open('payload/package.json'))
 assert p.get('allowScripts',{}).get('frida@17.17.0') is True
 PY
 
+# Artifact packaging must reference only current v24.3 support files.
+[[ -x ci/package-artifacts.sh ]]
+grep -Fq 'provision_api_keys.sh' ci/package-artifacts.sh
+! grep -Fq 'provision_google_key.sh' ci/package-artifacts.sh
+! grep -Fq 'experiments/' ci/package-artifacts.sh
+
 # Syntax/selftests.
 for s in ./*.sh ci/*.sh tools/*.sh payload/build_patch.sh; do [[ -f "$s" ]] && bash -n "$s"; done
 python3 -m py_compile tools/*.py ci/*.py
