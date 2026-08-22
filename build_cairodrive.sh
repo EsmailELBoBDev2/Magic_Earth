@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APK="${1:-$ROOT/input/base.apk}"
-PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-23.3}"
+PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-24.3}"
 PATCH_VERSION_SAFE="$(printf '%s' "$PATCH_VERSION" | tr -cs '0-9A-Za-z._-' '_')"
 TARGET_PACKAGE="${TARGET_PACKAGE:-com.cairodrive.app}"
 APP_LABEL="${APP_LABEL:-CairoDrive}"
@@ -46,7 +46,7 @@ TMPKS="$WORK/intermediate.keystore"
 
 # Rewrite only manifest package identity; preserve original component class namespace.
 apktool d -f -s -o "$WORK/decoded" "$WORK/patched-oldpkg.apk" >/dev/null
-VERSION_NAME_SUFFIX="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive233}"
+VERSION_NAME_SUFFIX="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive243}"
 SOURCE_VERSION_CODE="$($AAPT2 dump badging "$APK" | sed -n "s/^package:.*versionCode='\([0-9][0-9]*\)'.*/\1/p" | head -1)"
 [[ "$SOURCE_VERSION_CODE" =~ ^[0-9]+$ ]] || { echo "ERROR: could not read source versionCode" >&2; exit 1; }
 if [[ -n "${CAIRODRIVE_PLAY_VERSION_CODE:-}" ]]; then
@@ -87,7 +87,7 @@ UNIVERSAL_VERSION_CODE="$($AAPT2 dump badging "$UNIVERSAL" | sed -n "s/^package:
 [[ "$UNIVERSAL_VERSION_CODE" == "$PLAY_VERSION_CODE" ]] || { echo "ERROR: AAB universal versionCode=$UNIVERSAL_VERSION_CODE expected=$PLAY_VERSION_CODE" >&2; exit 1; }
 
 cat > "$OUTDIR/BUILD_REPORT.txt" <<EOF
-CairoDrive v${PATCH_VERSION_SAFE} Google Places + Native Traffic Paths + Narrow Road Assist
+CairoDrive v${PATCH_VERSION_SAFE} Google Places + Google Route Traffic + Google Nearby Free Drive Traffic
 source_sha256=$(sha256sum "$APK"|awk '{print $1}')
 source_version_code=$SOURCE_VERSION_CODE
 play_version_code=$PLAY_VERSION_CODE
@@ -99,6 +99,8 @@ signing_cert_sha1=$CERT_SHA1
 signing_cert_sha256=$CERT_SHA256
 google_api_keys_embedded=no
 google_api_keys_runtime_provisioned=yes
+google_map_tiles_key_embedded=no
+google_map_tiles_key_runtime_provisioned=yes
 compatibility_report=$(tr -d '\n' < "$WORK/preflight.json")
 EOF
 printf '\nBUILD SUCCESS\nAPK: %s\nAAB: %s\nPackage: %s\n' "$FINAL_APK" "$FINAL_AAB" "$TARGET_PACKAGE"

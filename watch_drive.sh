@@ -2,16 +2,12 @@
 set -euo pipefail
 MODE="${1:-live}"
 PKG="${TARGET_PACKAGE:-com.cairodrive.app}"
-PATTERN='v22\.1-kiss-fast-reroute[^|]*|ROUTE_ALGO_ENUMS|pathAlgorithm=EXPERIMENT|CAIRODRIVE_READY|SEARCH_INTERCEPT|GOOGLE_|FALLBACK|MAGICLANE_TRAFFIC|NAV_ROUTE_PREFS|ROUTE_RECOMPUTE_|ROUTE_UPDATED|BETTER_ROUTE_INVALIDATED|GOOGLE_TRAFFIC_PAUSED|DRIVE_ASSIST_SHOW|MANEUVER_IMAGE|NARROW_EVIDENCE|NARROW_ROADBLOCK|ARRIVAL_OPEN_CHECK|PLACE_DETAILS|LANDMARK_DETAILS_ENRICHED|NAV_POINT_SELECTED|DRIVE_TRACE|DRIVE_SYSTEM|SOCIAL_REPORT|VOICE_REPEAT|MEDIA_PAUSE|OSM_TRAFFIC_CALMING|FATAL EXCEPTION|ANR in|SIGSEGV|SIGABRT'
+PATTERN='cairodrive-v24\.3|DIAG_START|DRIVE_DIAGNOSTICS_READY|CAIRODRIVE_READY|KEY_STATE|GOOGLE_TILE_KEY_STATE|SEARCH_INTERCEPT|GOOGLE_REQUEST|GOOGLE_OK|GOOGLE_EMPTY|GOOGLE_HTTP|NATIVE_SEARCH_FALLBACK|FREE_TRAFFIC_|GOOGLE_TRAFFIC_|TRAFFIC_MAP_|NARROW_|ROADBLOCK_|NAV_SESSION|NAV_CAPTURE|STALE_ROUTE|FATAL EXCEPTION|ANR in|SIGSEGV|SIGABRT'
 case "$MODE" in
-  clear) adb logcat -c;;
-  live) adb logcat -v time -s cairodrive:I AndroidRuntime:E ActivityManager:E | grep --line-buffered -E "$PATTERN";;
-  snapshot) adb logcat -d -v time | grep -E "$PATTERN" | tail -n 3000;;
-  pull) exec "$(dirname "$0")/pull_logs.sh";;
-  summary)
-    tmp="$(mktemp)"; trap 'rm -f "$tmp"' EXIT
-    adb logcat -d -v time > "$tmp"
-    for p in 'SEARCH_INTERCEPT' 'AUTOCOMPLETE_REQUEST' 'AUTOCOMPLETE_OK' 'AUTOCOMPLETE_SELECT' 'GOOGLE_OK' 'PLACE_DETAILS_OK' 'LANDMARK_DETAILS_ENRICHED' 'NAV_POINT_SELECTED' 'NATIVE_SEARCH_FALLBACK' 'ROUTE_ALGO_ENUMS' 'NAV_ROUTE_PREFS_PATCHED' 'ROUTE_RECOMPUTE_STARTED' 'ROUTE_RECOMPUTE_DONE' 'ROUTE_RECOMPUTE_E2E' 'DRIVE_ASSIST_SHOW' 'NARROW_ROADBLOCK_APPLIED' 'GOOGLE_TRAFFIC_REQUEST' 'GOOGLE_TRAFFIC_OK' 'GOOGLE_TRAFFIC_MATCH' 'GOOGLE_TRAFFIC_ROADBLOCK' 'GOOGLE_TRAFFIC_FALLBACK' 'NAV_ROADBLOCK_APPLIED reason=google-traffic' 'ARRIVAL_OPEN_CHECK' 'DRIVE_TRACE' 'SOCIAL_REPORT_SENT' 'SOCIAL_REPORT_PREP_FAIL' 'OSM_TRAFFIC_CALMING_QUEUED' 'VOICE_REPEAT_PLAY' 'VOICE_REPEAT_ERROR' 'FATAL EXCEPTION' 'ANR in' 'SIGSEGV' 'SIGABRT'; do printf '%-30s %s\n' "$p" "$(grep -cF "$p" "$tmp" || true)"; done;;
-  recompute) adb logcat -d -v time | "$(dirname "$0")/tools/summarize_recompute.py";;
-  *) echo "usage: $0 {clear|live|snapshot|summary|recompute|pull}" >&2; exit 2;;
+  clear) adb logcat -c ;;
+  live) adb logcat -v time -s cairodrive:I AndroidRuntime:E ActivityManager:E | grep --line-buffered -Ei "$PATTERN" ;;
+  snapshot) adb logcat -d -v time | grep -Ei "$PATTERN" | tail -n 4000 ;;
+  pull) exec "$(dirname "$0")/pull_logs.sh" ;;
+  files) adb shell "ls -lah /sdcard/Android/data/$PKG/files/cairodrive/logs 2>/dev/null || true" ;;
+  *) echo "usage: $0 {clear|live|snapshot|pull|files}" >&2; exit 2 ;;
 esac

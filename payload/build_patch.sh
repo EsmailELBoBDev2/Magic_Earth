@@ -15,6 +15,7 @@ need(){ command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing command: $1" >
 for c in node npm python3 unzip zip zipalign apksigner keytool javac jar sha256sum readelf; do need "$c"; done
 [[ -f "$APK" ]] || { echo "ERROR: APK not found: $APK" >&2; exit 1; }
 [[ -f "$GADGET" ]] || { echo "ERROR: Frida Gadget not found: $GADGET" >&2; exit 1; }
+python3 "$ROOT/../tools/verify_magiclane_runtime_surface.py" "$APK"
 find_d8(){ if command -v d8 >/dev/null 2>&1; then command -v d8; return; fi; for b in "${ANDROID_SDK_ROOT:-}" "${ANDROID_HOME:-}" /opt/android-sdk "$HOME/Android/Sdk"; do [[ -n "$b" && -d "$b/build-tools" ]] || continue; find "$b/build-tools" -mindepth 2 -maxdepth 2 -type f -name d8 -print 2>/dev/null | sort -V | tail -1; done | tail -1; }
 find_android_jar(){ for b in "${ANDROID_SDK_ROOT:-}" "${ANDROID_HOME:-}" /opt/android-sdk "$HOME/Android/Sdk"; do [[ -n "$b" && -d "$b/platforms" ]] || continue; find "$b/platforms" -mindepth 2 -maxdepth 2 -type f -name android.jar -print 2>/dev/null | sort -V | tail -1; done | tail -1; }
 D8="$(find_d8)"; ANDROID_JAR="$(find_android_jar)"; [[ -x "$D8" && -f "$ANDROID_JAR" ]] || { echo 'ERROR: Android d8/android.jar missing' >&2; exit 1; }
@@ -45,13 +46,15 @@ mkdir -p "$WORK/helper-classes" "$WORK/helper-dex"
 echo '==> Compiling CairoDrive helper/bootstrap DEX'
 javac --release 8 -cp "$ANDROID_JAR" -d "$WORK/helper-classes" \
   "$ROOT/helper/com/cairodrive/bootstrap/CairoDriveBootstrapProvider.java" \
-  "$ROOT/helper/com/cairodrive/search/AsyncHttp.java"
+  "$ROOT/helper/com/cairodrive/search/AsyncHttp.java" \
+  "$ROOT/helper/com/cairodrive/traffic/GoogleTrafficTileVectorizer.java"   "$ROOT/helper/com/cairodrive/diag/DriveDiagnostics.java"
 jar cf "$WORK/cairodrive-helper.jar" -C "$WORK/helper-classes" .
 "$D8" --min-api 21 --lib "$ANDROID_JAR" --output "$WORK/helper-dex" "$WORK/cairodrive-helper.jar" >/dev/null
 [[ -s "$WORK/helper-dex/classes.dex" ]] || { echo 'ERROR: helper DEX missing' >&2; exit 1; }
 
 node "$ROOT/../search_core_selftest.mjs"
 node "$ROOT/../traffic_core_selftest.mjs"
+node "$ROOT/../free_drive_google_traffic_selftest.mjs"
 AGENT_REL="$(basename "$AGENT")"
 cp "$ROOT/cairodrive-google-search-only.js" "$AGENT"
 python3 - "$AGENT" "$DART_OFF" "$POST_OFF" <<'PY'

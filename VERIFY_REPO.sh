@@ -41,6 +41,7 @@ fi
 if [[ -n "$BASE" ]]; then
   python3 ./tools/preflight.py "$BASE" --report "$TMP/preflight.json" >/dev/null
   python3 ./ci/verify-target-routing-surface.py "$BASE" >/dev/null
+  python3 ./tools/verify_magiclane_runtime_surface.py "$BASE" >/dev/null
   unzip -q "$BASE" lib/arm64-v8a/libGEM.so -d "$TMP/gem"
   python3 ./tools/discover_gem_globals.py "$TMP/gem/lib/arm64-v8a/libGEM.so" >/dev/null
 fi
@@ -83,12 +84,11 @@ grep -q 'actions/cache@v5' .github/workflows/build.yml
 ! grep -q 'must remain PRIVATE' UPDATE_APK.sh
 grep -q 'git merge --ff-only origin/main' UPDATE_APK.sh
 grep -q 'npm ci --no-audit --no-fund' payload/build_patch.sh
-grep -q 'PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-23.3}"' build_cairodrive.sh
-grep -q 'VERSION_NAME_SUFFIX="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive233}"' build_cairodrive.sh
+grep -q 'PATCH_VERSION="${CAIRODRIVE_PATCH_VERSION:-24.3}"' build_cairodrive.sh
+grep -q 'VERSION_NAME_SUFFIX="${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive243}"' build_cairodrive.sh
 grep -Fq -- '"--version-name-suffix=$VERSION_NAME_SUFFIX"' build_cairodrive.sh
 ! grep -Fq -- '--version-name-suffix "${CAIRODRIVE_VERSION_NAME_SUFFIX:--cairodrive23}"' build_cairodrive.sh
 grep -q 'APK="${1:-$ROOT/input/base.apk}"' build_cairodrive.sh
-grep -q 'APK="${1:-$ROOT/input/base.apk}"' build_and_update.sh
 grep -q 'BOOT agent=' watch_search.sh
 grep -q 'BOOT agent=' watch_nav.sh
 grep -q 'CAIRODRIVE_PATCH_VERSION:' .github/workflows/build.yml
@@ -104,8 +104,8 @@ assert p.get('allowScripts',{}).get('frida@17.17.0') is True
 PY
 
 # Syntax/selftests.
-for s in ./*.sh ci/*.sh tools/*.sh payload/build_patch.sh experiments/*.sh; do [[ -f "$s" ]] && bash -n "$s"; done
-python3 -m py_compile tools/*.py ci/*.py experiments/*.py
+for s in ./*.sh ci/*.sh tools/*.sh payload/build_patch.sh; do [[ -f "$s" ]] && bash -n "$s"; done
+python3 -m py_compile tools/*.py ci/*.py
 cp payload/cairodrive-google-search-only.js "$TMP/agent.mjs"; node --check "$TMP/agent.mjs"
 node search_core_selftest.mjs >/dev/null
 node traffic_core_selftest.mjs >/dev/null
@@ -122,10 +122,10 @@ grep -Fq 'EXPECTED_UPLOAD_CERT_SHA1: D9:19:59:58:60:C9:47:E3:FC:A6:5A:16:EF:FB:B
 grep -Fq 'Play signing fingerprint guard: PASS' build_cairodrive.sh
 
 # v23.3 minimal runtime regression guards.
-grep -Fq "VERSION='v23.3-drive-ready-r2'" payload/cairodrive-google-search-only.js
-grep -Fq "RUNTIME_TUNING='r4-peak-safe'" payload/cairodrive-google-search-only.js
+grep -Fq "VERSION='v24.3-drive-test-ready'" payload/cairodrive-google-search-only.js
+grep -Fq "RUNTIME_TUNING='r8-drive-observability'" payload/cairodrive-google-search-only.js
 grep -Fq 'NAV_INITIAL_ASSIST_MS=400' payload/cairodrive-google-search-only.js
-grep -Fq 'TRAFFIC_POLL_MS=40' payload/cairodrive-google-search-only.js
+grep -Fq 'TRAFFIC_POLL_MS=100' payload/cairodrive-google-search-only.js
 grep -Fq 'ROADBLOCK_BINDINGS_CACHED' payload/cairodrive-google-search-only.js
 grep -Fq 'bindingCached=yes' payload/cairodrive-google-search-only.js
 grep -Fq 'SEARCH_INTERCEPT kind=typed' payload/cairodrive-google-search-only.js
@@ -182,4 +182,20 @@ grep -Fq 'SOURCE_VERSION_CODE=' build_cairodrive.sh
 grep -Fq 'PLAY_VERSION_OFFSET="${GITHUB_RUN_NUMBER:-1}"' build_cairodrive.sh
 grep -Fq -- '--version-code "$PLAY_VERSION_CODE"' build_cairodrive.sh
 grep -Fq 'play_version_code=$PLAY_VERSION_CODE' build_cairodrive.sh
-echo 'VERIFY_REPO: PASS — v23.3 drive-ready r2: lean Google Places, safe stock fallback, simulation-aware Google traffic, conservative narrow-road handling, bounded native traffic rendering, stock performance preservation, monotonic Play versionCode, and Play-key signing checks pass.'
+# v24 Google nearby Free Drive traffic + audit hardening.
+node free_drive_google_traffic_selftest.mjs >/dev/null
+grep -Fq 'Google-layerTraffic-raster-vector' payload/cairodrive-google-search-only.js
+grep -Fq 'GoogleTrafficTileVectorizer' payload/build_patch.sh
+grep -Fq 'com.magiclane.sdk.places.Coordinates' payload/cairodrive-google-search-only.js
+! grep -Fq 'com.magiclane.sdk.core.Coordinates' payload/cairodrive-google-search-only.js
+! grep -Fq 'prefs.setTrafficVisibility(true)' payload/cairodrive-google-search-only.js
+! test -e payload/helper/com/cairodrive/search/AutocompletePanel.java
+! test -e payload/helper/com/cairodrive/nav/NavBanner.java
+! test -e payload/helper/com/cairodrive/log/CairoLog.java
+! test -e .github/workflows/drive-ready-r2.yml
+
+node deep_audit_selftest.mjs >/dev/null
+grep -Fq 'DriveDiagnostics.java' payload/build_patch.sh
+grep -Fq 'DRIVE_DIAGNOSTICS_READY' payload/cairodrive-google-search-only.js
+grep -Fq 'METRIC cpuCorePct=' payload/helper/com/cairodrive/diag/DriveDiagnostics.java
+echo 'VERIFY_REPO: PASS — v24.3 drive-test-ready: exact Magic Lane surface, GEM-thread routing, Google Places/Routes/Free Drive traffic, bounded native rendering, API economy and signing guards pass.'

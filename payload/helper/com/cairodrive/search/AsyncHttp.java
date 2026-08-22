@@ -33,6 +33,7 @@ public final class AsyncHttp {
         volatile String body, error;
         volatile Future<?> future;
         volatile HttpsURLConnection connection;
+        volatile long finishedAtMs;
     }
 
     private static URL checkedUrl(String s) throws Exception {
@@ -42,15 +43,17 @@ public final class AsyncHttp {
         String host=u.getHost(); String path=u.getPath()==null?"":u.getPath();
         boolean places="places.googleapis.com".equalsIgnoreCase(host) && (
             path.equals("/v1/places:autocomplete") || path.equals("/v1/places:searchText") ||
-            path.equals("/v1/places:searchNearby") || path.startsWith("/v1/places/")
+            path.equals("/v1/places:searchNearby") || path.matches("/v1/places/[^/]+")
         );
         boolean routes="routes.googleapis.com".equalsIgnoreCase(host) && path.equals("/directions/v2:computeRoutes");
         if (!places && !routes) throw new SecurityException("endpoint not allowlisted: "+host+path);
         return u;
     }
     private static void reap() {
+        long now=System.currentTimeMillis();
         for (Map.Entry<Long,State> e: STATES.entrySet()) {
-            State s=e.getValue(); if (s.done || s.cancelled) STATES.remove(e.getKey(),s);
+            State s=e.getValue();
+            if (s.cancelled || (s.done && s.finishedAtMs>0L && now-s.finishedAtMs>60000L)) STATES.remove(e.getKey(),s);
         }
     }
     private static synchronized long newState(State s) {
@@ -90,7 +93,7 @@ public final class AsyncHttp {
             if(in!=null && "gzip".equalsIgnoreCase(conn.getContentEncoding()))in=new GZIPInputStream(in);
             String result=readLimited(in,state); if(!state.cancelled){state.status=status;state.body=result;}
         } catch(Throwable t){if(!state.cancelled)state.error=t.getClass().getName()+": "+String.valueOf(t.getMessage());}
-        finally { state.connection=null; if(conn!=null)try{conn.disconnect();}catch(Throwable ignored){} state.done=true; }} });
+        finally { state.connection=null; if(conn!=null)try{conn.disconnect();}catch(Throwable ignored){} state.finishedAtMs=System.currentTimeMillis(); state.done=true; }} });
         return id;
     }
 
@@ -104,7 +107,7 @@ public final class AsyncHttp {
             if(in!=null&&"gzip".equalsIgnoreCase(conn.getContentEncoding()))in=new GZIPInputStream(in);String result=readLimited(in,state);
             if(!state.cancelled){state.status=status;state.body=result;}
         }catch(Throwable t){if(!state.cancelled)state.error=t.getClass().getName()+": "+String.valueOf(t.getMessage());}
-        finally{state.connection=null;if(conn!=null)try{conn.disconnect();}catch(Throwable ignored){}state.done=true;}}});return id;
+        finally{state.connection=null;if(conn!=null)try{conn.disconnect();}catch(Throwable ignored){}state.finishedAtMs=System.currentTimeMillis(); state.done=true;}}});return id;
     }
 
     public static String poll(long id){State s=STATES.get(id);if(s==null)return "CANCELLED";if(!s.done&&!s.cancelled)return null;STATES.remove(id);if(s.cancelled)return "CANCELLED";if(s.error!=null)return "ERR:"+s.error;return "OK:"+s.status+"\n"+(s.body==null?"":s.body);}

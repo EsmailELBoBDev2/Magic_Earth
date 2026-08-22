@@ -132,7 +132,7 @@ assert(!narrowGate({type:'Path',lengthM:180,aheadM:40,remainingAfterM:2500}));
 assert(!narrowGate({type:'Residential',lengthM:400,aheadM:900,remainingAfterM:2500}));
 
 // Drive-ready source contracts.
-assert(agent.includes("const VERSION='v23.3-drive-ready-r2'"));
+assert(agent.includes("const VERSION='v24.3-drive-test-ready'"));
 assert(agent.includes('FAST_SEARCH_MAX_RESULTS=10'));
 assert(agent.includes('FAST_SEARCH_FIELD_MASK'));
 assert(agent.includes('ADDRESS_INJECT streetNumber='));

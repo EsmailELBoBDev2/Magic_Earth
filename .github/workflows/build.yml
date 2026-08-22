@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  CAIRODRIVE_PATCH_VERSION: '23.3'
+  CAIRODRIVE_PATCH_VERSION: '24.3'
   TARGET_PACKAGE: com.cairodrive.app
   APP_LABEL: CairoDrive
   FRIDA_VERSION: '17.17.0'

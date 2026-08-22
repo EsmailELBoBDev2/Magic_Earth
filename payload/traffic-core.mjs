@@ -99,17 +99,17 @@ export function matchMagicSamplesToTraffic(samples,traffic,{maxDistanceM=35,maxH
   const ss=Array.isArray(samples)?samples:[],edges=traffic&&Array.isArray(traffic.edges)?traffic.edges:[]; if(ss.length<2||!edges.length)return {coverage:0,matched:[],normalM:0,slowM:0,jamM:0,strongJamRun:null,usable:false};
   const spatial=buildTrafficEdgeGrid(edges,maxDistanceM);
   const matched=[];let possible=0,covered=0,normalM=0,slowM=0,jamM=0,candidateChecks=0;
-  for(let i=0;i<ss.length;i++){
-    const p=ss[i]; const step=Math.max(0,Number(p.stepM||50)); possible+=step; let best=null;
+  for(let i=0;i<ss.length-1;i++){
+    const p=ss[i],nxt=ss[i+1]; const fallback=Math.max(0,Number(p.stepM||50)),delta=Number(nxt&&nxt.routeDistanceM)-Number(p.routeDistanceM),weightM=Number.isFinite(delta)&&delta>0?delta:fallback;if(!(weightM>0))continue;possible+=weightM; let best=null;
     const cy=Math.floor(Number(p.latitude)/spatial.cell),cx=Math.floor(Number(p.longitude)/spatial.cell);const ids=new Set();
     for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const a=spatial.grid.get(spatial.key(cy+dy,cx+dx));if(a)for(const id of a)ids.add(id);}
     // Fail-safe for unusual long segments omitted by the bounded grid. This is
     // rare; correctness wins over speed when the index cannot supply candidates.
     const candidates=ids.size?[...ids]:edges.map((_,j)=>j);
     for(const j of candidates){candidateChecks++;const e=edges[j],dist=segDistance(p,e.a,e.b);if(dist>maxDistanceM)continue;const hd=Number.isFinite(Number(p.heading))?headingDiff(p.heading,e.bearing):0;if(hd>maxHeadingDiffDeg)continue;const score=dist+hd*0.35;if(!best||score<best.score)best={edge:e,edgeIndex:j,dist,hd,score};}
-    if(!best)continue;covered+=step;const speed=best.edge.speed||'NORMAL';if(speed==='TRAFFIC_JAM')jamM+=step;else if(speed==='SLOW')slowM+=step;else normalM+=step;matched.push({...p,speed,matchDistanceM:best.dist,headingDiffDeg:best.hd,edgeIndex:best.edgeIndex});
+    if(!best)continue;covered+=weightM;const speed=best.edge.speed||'NORMAL';if(speed==='TRAFFIC_JAM')jamM+=weightM;else if(speed==='SLOW')slowM+=weightM;else normalM+=weightM;matched.push({...p,matchLengthM:weightM,speed,matchDistanceM:best.dist,headingDiffDeg:best.hd,edgeIndex:best.edgeIndex});
   }
   let bestRun=null,run=null;
-  for(const m of matched){if(m.speed==='TRAFFIC_JAM'){if(!run||m.routeDistanceM-(run.lastRouteDistanceM||m.routeDistanceM)>Math.max(100,(m.stepM||50)*2.5))run={startRouteDistanceM:m.routeDistanceM,endRouteDistanceM:m.routeDistanceM,lengthM:0,lastRouteDistanceM:m.routeDistanceM};run.endRouteDistanceM=m.routeDistanceM+(m.stepM||50);run.lengthM+=m.stepM||50;run.lastRouteDistanceM=m.routeDistanceM;if(!bestRun||run.lengthM>bestRun.lengthM)bestRun={...run};}else run=null;}
+  for(const m of matched){if(m.speed==='TRAFFIC_JAM'){const w=Math.max(0,Number(m.matchLengthM)||0);if(!run||m.routeDistanceM-(run.lastRouteDistanceM||m.routeDistanceM)>Math.max(100,w*2.5))run={startRouteDistanceM:m.routeDistanceM,endRouteDistanceM:m.routeDistanceM,lengthM:0,lastRouteDistanceM:m.routeDistanceM};run.endRouteDistanceM=m.routeDistanceM+w;run.lengthM+=w;run.lastRouteDistanceM=m.routeDistanceM;if(!bestRun||run.lengthM>bestRun.lengthM)bestRun={...run};}else run=null;}
   const coverage=possible>0?covered/possible:0;return {coverage,matched,normalM,slowM,jamM,strongJamRun:bestRun,usable:coverage>=minCoverage,candidateChecks,totalEdgeChecksBruteForce:ss.length*edges.length};
 }

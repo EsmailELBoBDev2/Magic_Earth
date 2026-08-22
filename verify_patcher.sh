@@ -5,6 +5,7 @@ for f in \
   payload/cairodrive-google-search-only.js \
   payload/search-core.mjs \
   payload/traffic-core.mjs \
+  payload/helper/com/cairodrive/traffic/GoogleTrafficTileVectorizer.java   payload/helper/com/cairodrive/diag/DriveDiagnostics.java \
   payload/libcairodrive_filter.so \
   payload/helper/com/cairodrive/bootstrap/CairoDriveBootstrapProvider.java \
   payload/helper/com/cairodrive/search/AsyncHttp.java \
@@ -15,6 +16,8 @@ done
 
 node search_core_selftest.mjs
 node traffic_core_selftest.mjs
+node free_drive_google_traffic_selftest.mjs
+node deep_audit_selftest.mjs
 node drive_ready_corridor_selftest.mjs
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 cp payload/cairodrive-google-search-only.js "$TMP/agent.mjs"
@@ -22,12 +25,12 @@ node --check "$TMP/agent.mjs"
 
 grep -q 'GEM_DART_PORT_OFFSET' payload/cairodrive-google-search-only.js
 grep -q 'GEM_POST_COBJECT_SLOT_OFFSET' payload/cairodrive-google-search-only.js
-grep -Fq "VERSION='v23.3-drive-ready-r2'" payload/cairodrive-google-search-only.js
-grep -Fq "RUNTIME_TUNING='r4-peak-safe'" payload/cairodrive-google-search-only.js
-grep -Fq 'SEARCH_POLL_MS=20' payload/cairodrive-google-search-only.js
-grep -Fq 'NEARBY_POLL_MS=25' payload/cairodrive-google-search-only.js
+grep -Fq "VERSION='v24.3-drive-test-ready'" payload/cairodrive-google-search-only.js
+grep -Fq "RUNTIME_TUNING='r8-drive-observability'" payload/cairodrive-google-search-only.js
+grep -Fq 'SEARCH_POLL_MS=35' payload/cairodrive-google-search-only.js
+grep -Fq 'NEARBY_POLL_MS=40' payload/cairodrive-google-search-only.js
 grep -Fq 'NAV_INITIAL_ASSIST_MS=400' payload/cairodrive-google-search-only.js
-grep -Fq 'TRAFFIC_POLL_MS=40' payload/cairodrive-google-search-only.js
+grep -Fq 'TRAFFIC_POLL_MS=100' payload/cairodrive-google-search-only.js
 grep -Fq 'ROADBLOCK_BINDINGS_CACHED' payload/cairodrive-google-search-only.js
 grep -Fq 'bindingCached=yes' payload/cairodrive-google-search-only.js
 grep -Fq 'initialAssistRetryDelay' payload/cairodrive-google-search-only.js
@@ -79,6 +82,22 @@ grep -Fq 'stockInternals=untouched' payload/cairodrive-google-search-only.js
 ! grep -q 'EXPECTED_LIBAPP_SHA256' payload/build_patch.sh
 ! grep -q 'patch_libflutter.py' payload/build_patch.sh
 ! grep -RqsE 'AIza[0-9A-Za-z_-]{25,}' payload
+grep -Fq 'FREE_TRAFFIC_READY source=Google-layerTraffic-raster-vector' payload/cairodrive-google-search-only.js
+grep -Fq 'NAV_TRAFFIC_RENDER_STEP_M=12' payload/cairodrive-google-search-only.js
+grep -Fq 'FREE_TRAFFIC_MAX_PATHS=36' payload/cairodrive-google-search-only.js
+grep -Fq 'layerTraffic' payload/helper/com/cairodrive/traffic/GoogleTrafficTileVectorizer.java
+grep -Fq 'overlay\":true' payload/helper/com/cairodrive/traffic/GoogleTrafficTileVectorizer.java
+grep -Fq 'If-None-Match' payload/helper/com/cairodrive/traffic/GoogleTrafficTileVectorizer.java
+grep -Fq 'finishedAtMs>0L' payload/helper/com/cairodrive/search/AsyncHttp.java
+grep -Fq 'com.magiclane.sdk.places.Coordinates' payload/cairodrive-google-search-only.js
+! grep -Fq 'com.magiclane.sdk.core.Coordinates' payload/cairodrive-google-search-only.js
+! grep -Fq "['network','empty','parse'].includes" payload/cairodrive-google-search-only.js
+! grep -Fq 'prefs.setTrafficVisibility(true)' payload/cairodrive-google-search-only.js
+! grep -Fq 'onDrawFrameCustom' payload/cairodrive-google-search-only.js
 file payload/libcairodrive_filter.so | grep -qi 'aarch64\|ARM64'
 
-echo 'v23.3 R2 + R4 peak-safe runtime tuning static verification: PASS'
+echo 'v24.3 drive-test observability + deep-audit verification: PASS'
+
+grep -Fq 'DRIVE_DIAGNOSTICS_READY' payload/cairodrive-google-search-only.js
+grep -Fq 'METRIC cpuCorePct=' payload/helper/com/cairodrive/diag/DriveDiagnostics.java
+grep -Fq 'RETAIN_MS = 3L' payload/helper/com/cairodrive/diag/DriveDiagnostics.java
